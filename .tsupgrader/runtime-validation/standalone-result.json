@@ -1,0 +1,125 @@
+{
+  "planHash": "e476348b82b728199a6e80d02f163be29d425fd777febae226a29f832be31a1d",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-10-27T11:36:05.4852133Z",
+  "retryCount": 2,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "typecheck-passes",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "",
+        "durationMs": 5823
+      },
+      {
+        "name": "build-passes",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\u001B[36mvite v7.3.7 \u001B[32mbuilding client environment for production...\u001B[36m\u001B[39m\r\n\u003Cscript src=\u0022/api/platform/config.js\u0022\u003E in \u0022/index.html\u0022 can\u0027t be bundled without type=\u0022module\u0022 attribute\r\ntransforming...\r\n\u001B[32m\u2713\u001B[39m 1698 modules transformed.\r\nrendering chunks...\r\ncomputing gzip size...\r\n\u001B[2m../dist/public/\u001B[22m\u001B[32mapi/platform/config.js     \u001B[39m\u001B[1m\u001B[2m  0.09 kB\u001B[22m\u001B[1m\u001B[22m\r\n\u001B[2m../dist/public/\u001B[22m\u001B[32mindex.html                 \u001B[39m\u001B[1m\u001B[2m  0.81 kB\u001B[22m\u001B[1m\u001B[22m\u001B[2m \u2502 gzip:   0.45 kB\u001B[22m\r\n\u001B[2m../dist/public/\u001B[22m\u001B[35massets/index-CZOeklnL.css  \u001B[39m\u001B[1m\u001B[2m132.26 kB\u001B[22m\u001B[1m\u001B[22m\u001B[2m \u2502 gzip:  23.17 kB\u001B[22m\r\n\u001B[2m../dist/public/\u001B[22m\u001B[36massets/index-CxusOgne.js   \u001B[39m\u001B[1m\u001B[2m464.95 kB\u001B[22m\u001B[1m\u001B[22m\u001B[2m \u2502 gzip: 134.25 kB\u001B[22m\r\n\u001B[32m\u2713 built in 21.29s\u001B[39m\r\n",
+        "durationMs": 22878
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u001B[1m\u001B[7m\u001B[36m RUN \u001B[39m\u001B[27m\u001B[22m \u001B[36mv2.1.9 \u001B[39m\u001B[90mC:/Users/Deon Raj/OneDrive/Desktop/Vs_code/hwp\u001B[39m\r\n\r\n \u001B[32m\u2713\u001B[39m server/auth.logout.test.ts \u001B[2m(\u001B[22m\u001B[2m1 test\u001B[22m\u001B[2m)\u001B[22m\u001B[90m 15\u001B[2mms\u001B[22m\u001B[39m\r\n\u001B[90mstdout\u001B[2m | server/platform.test.ts\r\n\u001B[22m\u001B[39m[OAuth] Initialized with baseURL: \r\n\r\n\u001B[90mstderr\u001B[2m | server/platform.test.ts\r\n\u001B[22m\u001B[39m[OAuth] ERROR: MANUS_OAUTH_API_URL is not configured! Set MANUS_OAUTH_API_URL environment variable.\r\n\r\n\u001B[90mstderr\u001B[2m | server/platform.test.ts\u001B[2m \u003E \u001B[22m\u001B[2mcurrent platform integration\u001B[2m \u003E \u001B[22m\u001B[2mbinds signed app sessions to this project and accepts an empty display name\r\n\u001B[22m\u001B[39m[Auth] Session payload missing required fields\r\n\r\n \u001B[32m\u2713\u001B[39m server/platform.test.ts \u001B[2m(\u001B[22m\u001B[2m5 tests\u001B[22m\u001B[2m)\u001B[22m\u001B[90m 52\u001B[2mms\u001B[22m\u001B[39m\r\n\r\n\u001B[2m Test Files \u001B[22m \u001B[1m\u001B[32m2 passed\u001B[39m\u001B[22m\u001B[90m (2)\u001B[39m\r\n\u001B[2m      Tests \u001B[22m \u001B[1m\u001B[32m6 passed\u001B[39m\u001B[22m\u001B[90m (6)\u001B[39m\r\n\u001B[2m   Start at \u001B[22m 17:05:49\r\n\u001B[2m   Duration \u001B[22m 5.13s\u001B[2m (transform 645ms, setup 0ms, collect 3.95s, tests 67ms, environment 2ms, prepare 1.76s)\u001B[22m\r\n\r\n",
+        "durationMs": 10454,
+        "testResults": {
+          "testFramework": "vitest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 6,
+          "testsPassed": 6,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": false
+        }
+      },
+      {
+        "name": "health-endpoint-200",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n{\u0022status\u0022:\u0022ok\u0022}\n--- server output ---\n[OAuth] ERROR: MANUS_OAUTH_API_URL is not configured! Set MANUS_OAUTH_API_URL environment variable.\r\n[OAuth] Initialized with baseURL: \r\nServer listening on port 4173\r\n",
+        "durationMs": 10499
+      }
+    ],
+    "executions": [
+      {
+        "source": "typecheck-passes",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\node.exe",
+        "args": [
+          "node_modules/typescript/bin/tsc",
+          "--noEmit"
+        ],
+        "cwd": "C:\\Users\\Deon Raj\\OneDrive\\Desktop\\Vs_code\\hwp",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "build-passes",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\node.exe",
+        "args": [
+          "node_modules/vite/bin/vite.js",
+          "build"
+        ],
+        "cwd": "C:\\Users\\Deon Raj\\OneDrive\\Desktop\\Vs_code\\hwp",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\node.exe",
+        "args": [
+          "node_modules/vitest/vitest.mjs",
+          "run"
+        ],
+        "cwd": "C:\\Users\\Deon Raj\\OneDrive\\Desktop\\Vs_code\\hwp",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "health-endpoint-200",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\node.exe",
+        "args": [
+          "node_modules/tsx/dist/cli.mjs",
+          "server/_core/index.ts"
+        ],
+        "cwd": "C:\\Users\\Deon Raj\\OneDrive\\Desktop\\Vs_code\\hwp",
+        "env": {
+          "NODE_ENV": "development",
+          "PORT": "4173"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

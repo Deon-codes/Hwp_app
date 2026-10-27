@@ -1,0 +1,8 @@
+{
+  "routes": [
+    { "path": "/", "title": "Discover · ESCAPE" },
+    { "path": "/find", "title": "Break Finder · ESCAPE" },
+    { "path": "/saved", "title": "Saved · ESCAPE" },
+    { "path": "/profile", "title": "Profile · ESCAPE" }
+  ]
+}

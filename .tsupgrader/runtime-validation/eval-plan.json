@@ -1,0 +1,61 @@
+{
+  "generatedAt": "2026-10-27T06:25:00Z",
+  "generatedOnPlatform": "win32",
+  "projectType": "webapp",
+  "setup": [],
+  "assertions": [
+    {
+      "name": "typecheck-passes",
+      "kind": "process",
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "node_modules/typescript/bin/tsc",
+        "--noEmit"
+      ],
+      "verificationMethod": "exit-code",
+      "expected": "0",
+      "timeoutSeconds": 120
+    },
+    {
+      "name": "build-passes",
+      "kind": "process",
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "node_modules/vite/bin/vite.js",
+        "build"
+      ],
+      "verificationMethod": "exit-code",
+      "expected": "0",
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "tests-pass",
+      "kind": "process",
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "node_modules/vitest/vitest.mjs",
+        "run"
+      ],
+      "verificationMethod": "test-results",
+      "expected": "0",
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "health-endpoint-200",
+      "kind": "http-probe",
+      "startCommand": "C:\\Program Files\\nodejs\\node.exe",
+      "startArgs": [
+        "node_modules/tsx/dist/cli.mjs",
+        "server/_core/index.ts"
+      ],
+      "env": {
+        "NODE_ENV": "development",
+        "PORT": "4173"
+      },
+      "url": "http://127.0.0.1:4173/api/health",
+      "verificationMethod": "http-status",
+      "expected": "200",
+      "timeoutSeconds": 120
+    }
+  ]
+}
