@@ -1,269 +1,572 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   activities,
   activityById,
   type Activity,
-  type Availability,
-  type BreakDuration,
-  type Budget,
-  type Company,
-  friends,
+  type AvailabilityWindow,
   type FinderTab,
+  type Friend,
   type Mood,
   placeById,
-  places,
+  type Place,
 } from "./escape-data";
+import {
+  acceptFriendRequest as acceptFriendRequestLogic,
+  cancelPlan as cancelPlanLogic,
+  createPlan as createPlanLogic,
+  getAvailabilityView,
+  getAcceptedFriends,
+  getAvailableFriends,
+  getFriendRequestCounts,
+  getFriendViews,
+  getNextPlan,
+  getPlanBuckets,
+  initialsFromName,
+  normalizeState,
+  rejectFriendRequest as rejectFriendRequestLogic,
+  removeFriend as removeFriendLogic,
+  respondToPlan as respondToPlanLogic,
+  sendFriendRequest as sendFriendRequestLogic,
+  setAvailability as setAvailabilityLogic,
+  setAvailabilityWindow as setAvailabilityWindowLogic,
+  toggleSavedId,
+  updatePlan as updatePlanLogic,
+  updateProfileFields,
+  validatePlanDraft,
+  withdrawFriendRequest as withdrawFriendRequestLogic,
+  type AvailabilityView,
+  type DiscoveryPreferences,
+  type EscapeState,
+  type Plan,
+  type PlanBuckets,
+  type PlanDraft,
+  type PlanDraftErrors,
+  type PlanResult,
+  type ProfileErrors,
+  type ProfileState,
+  type SortMode,
+  type View,
+} from "./escape-logic";
+import {
+  loadEscapeState,
+  saveEscapeState,
+  STORAGE_KEY,
+  type StorageLike,
+  type StorageWarning,
+} from "./escape-storage";
 
-export type View = "discover" | "find" | "saved" | "profile";
-export type SortMode = "best" | "shortest" | "lowest";
-export type DetailItem = Activity | (typeof places)[number];
+export type { AvailabilityView, DetailItem, Plan, PlanBuckets, PlanDraft, ProfileState, View } from "./escape-logic";
+export type RouteView = View | "notfound";
 
-export type ProfileState = {
-  name: string;
-  avatar: string;
-  preferredMoods: Mood[];
-  defaultDuration: BreakDuration;
-  defaultBudget: Budget;
-  company: Company;
-  availability: Availability;
-};
-
-export type DiscoveryPreferences = {
-  mood: Mood;
-  duration: BreakDuration;
-  budget: Budget;
-  company: Company;
-};
-
-export type PlanState = {
-  itemId: string;
-  itemName: string;
-  duration: BreakDuration;
-  budget: Budget;
+export type PlannerState = {
+  item: Activity | Place;
   friendIds: string[];
-  createdAt: string;
+  plan: Plan | null;
 };
 
-type Toast = { id: number; message: string; tone: "success" | "info" };
+type Toast = { id: number; message: string; tone: "success" | "info" | "error" };
 
 type EscapeContextValue = {
-  view: View;
+  view: RouteView;
   setView: (view: View) => void;
   prefs: DiscoveryPreferences;
   setMood: (mood: Mood) => void;
-  setDuration: (duration: BreakDuration) => void;
-  setBudget: (budget: Budget) => void;
-  setCompany: (company: Company) => void;
+  setDuration: (duration: DiscoveryPreferences["duration"]) => void;
+  setBudget: (budget: DiscoveryPreferences["budget"]) => void;
+  setCompany: (company: DiscoveryPreferences["company"]) => void;
+  finderTab: FinderTab;
+  setFinderTab: (tab: FinderTab) => void;
   sortMode: SortMode;
   setSortMode: (mode: SortMode) => void;
-  recommendations: Activity[];
   savedIds: string[];
   isSaved: (id: string) => boolean;
   toggleSaved: (id: string) => void;
   profile: ProfileState;
-  updateProfile: (patch: Partial<ProfileState>) => void;
-  setAvailability: (availability: Availability) => void;
-  finderTab: FinderTab;
-  setFinderTab: (tab: FinderTab) => void;
-  invitedIds: string[];
-  friends: typeof friends;
+  profileErrors: ProfileErrors;
+  updateProfile: (patch: Partial<ProfileState>) => boolean;
+  availability: AvailabilityView;
+  setAvailability: (availability: ProfileState["availability"]) => void;
+  setAvailabilityWindow: (window: AvailabilityWindow) => void;
+  toggleShareAvailability: () => void;
+  toggleShareProfile: () => void;
+  friends: Friend[];
+  availableFriends: Friend[];
+  acceptedFriends: Friend[];
+  incomingRequests: Friend[];
+  outgoingRequests: Friend[];
+  friendRequestCounts: { incoming: number; outgoing: number };
+  sendFriendRequest: (friendId: string) => void;
+  acceptFriendRequest: (friendId: string) => void;
+  rejectFriendRequest: (friendId: string) => void;
+  withdrawFriendRequest: (friendId: string) => void;
+  removeFriend: (friendId: string) => void;
   inviteFriend: (friendId: string) => void;
-  detailItem: DetailItem | null;
-  openDetails: (item: DetailItem) => void;
+  plans: Plan[];
+  planBuckets: PlanBuckets;
+  nextPlan: Plan | null;
+  pendingInviteCount: number;
+  createPlan: (draft: PlanDraft) => PlanResult;
+  savePlanEdits: (planId: string, draft: PlanDraft) => PlanResult;
+  cancelPlan: (planId: string) => void;
+  respondToPlan: (planId: string, response: "accepted" | "declined") => void;
+  validatePlan: (draft: PlanDraft, editingPlanId?: string) => PlanDraftErrors;
+  detailItem: Activity | Place | null;
+  openDetails: (item: Activity | Place) => void;
   closeDetails: () => void;
-  planItem: DetailItem | null;
-  openPlanner: (item: DetailItem) => void;
+  planner: PlannerState | null;
+  openPlanner: (item: Activity | Place, friendIds?: string[]) => void;
+  openPlanEditor: (plan: Plan) => void;
   closePlanner: () => void;
-  createPlan: (plan: Omit<PlanState, "createdAt">) => void;
-  latestPlan: PlanState | null;
+  plansOpen: boolean;
+  openPlans: () => void;
+  closePlans: () => void;
   toast: Toast | null;
   showToast: (message: string, tone?: Toast["tone"]) => void;
   clearToast: () => void;
   jumpToRecommendations: () => void;
+  jumpToPreferences: () => void;
+  openPeople: () => void;
+  openSpots: () => void;
+  storageWarning: StorageWarning;
 };
 
-const STORAGE_KEY = "escape-demo-state-v1";
+const EscapeContext = createContext<EscapeContextValue | null>(null);
 
-const defaultProfile: ProfileState = {
-  name: "Maya",
-  avatar: "MS",
-  preferredMoods: ["Social", "Chill"],
-  defaultDuration: 15,
-  defaultBudget: 50,
-  company: "either",
-  availability: "available",
+const routeFromPath = (path: string): RouteView => {
+  const normalized = path.replace(/\/+$/, "") || "/";
+  if (normalized === "/") return "discover";
+  if (normalized === "/find") return "find";
+  if (normalized === "/saved") return "saved";
+  if (normalized === "/profile") return "profile";
+  return "notfound";
 };
 
-const defaultPrefs: DiscoveryPreferences = {
-  mood: "Chill",
-  duration: 15,
-  budget: 50,
-  company: "either",
-};
+const pathForView = (view: View) => (view === "discover" ? "/" : `/${view}`);
 
-const viewFromPath = (path: string): View => {
-  if (path === "/find") return "find";
-  if (path === "/saved") return "saved";
-  if (path === "/profile") return "profile";
-  return "discover";
-};
+const titleForView = (view: RouteView) =>
+  view === "find"
+    ? "Break Finder · ESCAPE"
+    : view === "saved"
+      ? "Saved · ESCAPE"
+      : view === "profile"
+        ? "Profile · ESCAPE"
+        : view === "notfound"
+          ? "Not found · ESCAPE"
+          : "Discover · ESCAPE";
 
-function readStored() {
+function getStorage(): StorageLike | null {
+  if (typeof window === "undefined") return null;
   try {
-    const value = localStorage.getItem(STORAGE_KEY);
-    return value ? JSON.parse(value) : null;
+    return window.localStorage;
   } catch {
     return null;
   }
 }
 
-function maxDurationFor(duration: BreakDuration) {
-  return duration;
-}
-
-function isCompanyMatch(social: Activity["social"], company: Company) {
-  if (company === "either") return true;
-  if (company === "solo") return social === "solo" || social === "both";
-  return social === "friends" || social === "both";
+function defaultActivityFor(friend: Friend): Activity {
+  const byMood = activities.find((activity) => activity.moods.includes(friend.mood));
+  return byMood ?? activities[0];
 }
 
 export function EscapeProvider({ children }: { children: React.ReactNode }) {
-  const stored = useMemo(readStored, []);
-  const [view, setViewState] = useState<View>(() => viewFromPath(window.location.pathname));
-  const [prefs, setPrefs] = useState<DiscoveryPreferences>(() => ({ ...defaultPrefs, ...stored?.prefs }));
-  const [sortMode, setSortMode] = useState<SortMode>(() => stored?.sortMode ?? "best");
-  const [savedIds, setSavedIds] = useState<string[]>(() => stored?.savedIds ?? []);
-  const [profile, setProfile] = useState<ProfileState>(() => ({ ...defaultProfile, ...stored?.profile }));
-  const [finderTab, setFinderTab] = useState<FinderTab>(() => stored?.finderTab ?? "spots");
-  const [invitedIds, setInvitedIds] = useState<string[]>(() => stored?.invitedIds ?? []);
-  const [latestPlan, setLatestPlan] = useState<PlanState | null>(() => stored?.latestPlan ?? null);
-  const [detailItem, setDetailItem] = useState<DetailItem | null>(null);
-  const [planItem, setPlanItem] = useState<DetailItem | null>(null);
+  const storage = useMemo(getStorage, []);
+  const initial = useMemo(() => loadEscapeState(storage, Date.now()), [storage]);
+  const [state, setState] = useState<EscapeState>(initial.state);
+  const [clock, setClock] = useState(() => Date.now());
+  const [view, setViewState] = useState<RouteView>(() =>
+    typeof window === "undefined" ? "discover" : routeFromPath(window.location.pathname),
+  );
+  const [detailItem, setDetailItem] = useState<Activity | Place | null>(null);
+  const [planner, setPlanner] = useState<PlannerState | null>(null);
+  const [plansOpen, setPlansOpen] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [profileErrors, setProfileErrors] = useState<ProfileErrors>({});
+  const saveFailureShown = useRef(false);
+  const lastPlanSignature = useRef<{ signature: string; at: number } | null>(null);
+  const initialMessageShown = useRef(false);
 
+  const showToast = useCallback((message: string, tone: Toast["tone"] = "success") => {
+    setToast({ id: Date.now() + Math.random(), message, tone });
+  }, []);
+
+  // Restore any migration/reset notice once, after first paint.
   useEffect(() => {
-    const onPopState = () => setViewState(viewFromPath(window.location.pathname));
+    if (initialMessageShown.current) return;
+    initialMessageShown.current = true;
+    if (initial.message) showToast(initial.message, initial.warning === "reset" ? "error" : "info");
+  }, [initial.message, initial.warning, showToast]);
+
+  // Keep route state in sync with browser history and direct navigation.
+  useEffect(() => {
+    const onPopState = () => {
+      setViewState(routeFromPath(window.location.pathname));
+      window.scrollTo({ top: 0, behavior: "auto" });
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ prefs, sortMode, savedIds, profile, finderTab, invitedIds, latestPlan }),
-    );
-  }, [prefs, sortMode, savedIds, profile, finderTab, invitedIds, latestPlan]);
+    document.title = titleForView(view);
+  }, [view]);
+
+  // Persist every meaningful state change.
+  useEffect(() => {
+    const result = saveEscapeState(storage, state);
+    if (!result.ok && !saveFailureShown.current) {
+      saveFailureShown.current = true;
+      showToast(
+        storage
+          ? "ESCAPE couldn't save this change. Your tab may be out of storage or in a restricted mode."
+          : "This browser blocks local storage, so changes last for this session only.",
+        "error",
+      );
+    }
+  }, [state, storage, showToast]);
+
+  // Pick up changes made in another tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY || !event.newValue) return;
+      try {
+        const parsed: unknown = JSON.parse(event.newValue);
+        setState(normalizeState(parsed, Date.now()));
+      } catch {
+        // Ignore malformed writes from other tabs.
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // A lightweight clock keeps availability countdowns and plan statuses honest
+  // without polling or any server calls.
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 3600);
+    const timer = window.setTimeout(() => setToast(null), 4200);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const availability = useMemo(() => getAvailabilityView(state.profile, clock), [state.profile, clock]);
+
+  // When a visibility window lapses, move the profile back to hidden so what is
+  // stored matches what friends are allowed to see.
+  useEffect(() => {
+    if (!availability.expired) return;
+    setState((current) =>
+      getAvailabilityView(current.profile, clock).expired
+        ? setAvailabilityLogic(current, "hidden", clock)
+        : current,
+    );
+  }, [availability.expired, clock]);
+
+  const friends = useMemo(() => getFriendViews(state, clock), [state, clock]);
+  const availableFriends = useMemo(() => getAvailableFriends(state, clock), [state, clock]);
+  const acceptedFriends = useMemo(() => getAcceptedFriends(state, clock), [state, clock]);
+  const incomingRequests = useMemo(
+    () => friends.filter((friend) => friend.relationship === "incoming"),
+    [friends],
+  );
+  const outgoingRequests = useMemo(
+    () => friends.filter((friend) => friend.relationship === "outgoing"),
+    [friends],
+  );
+  const friendRequestCounts = useMemo(() => getFriendRequestCounts(state), [state]);
+  const planBuckets = useMemo(() => getPlanBuckets(state, clock), [state, clock]);
+  const nextPlan = useMemo(() => getNextPlan(state, clock), [state, clock]);
+
   const setView = (nextView: View) => {
     setViewState(nextView);
-    const path = nextView === "discover" ? "/" : `/${nextView === "find" ? "find" : nextView}`;
+    const path = pathForView(nextView);
     if (window.location.pathname !== path) window.history.pushState({}, "", path);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setDetailItem(null);
+    setPlanner(null);
+    setPlansOpen(false);
+    window.scrollTo({ top: 0, behavior: "auto" });
   };
 
-  const recommendations = useMemo(() => {
-    const filtered = activities.filter((activity) => {
-      const moodMatch = activity.moods.includes(prefs.mood);
-      const budgetMatch = activity.price <= prefs.budget;
-      const durationMatch = activity.durationMin <= maxDurationFor(prefs.duration);
-      const companyMatch = isCompanyMatch(activity.social, prefs.company);
-      return moodMatch && budgetMatch && durationMatch && companyMatch;
-    });
-
-    return [...filtered].sort((a, b) => {
-      if (sortMode === "shortest") return a.durationMin - b.durationMin || a.walkMin - b.walkMin;
-      if (sortMode === "lowest") return a.price - b.price || a.durationMin - b.durationMin;
-      const score = (activity: Activity) => {
-        const moodScore = activity.moods.includes(prefs.mood) ? 3 : 0;
-        const companyScore = activity.social === prefs.company || activity.social === "both" ? 2 : 0;
-        const timeScore = activity.durationMin === prefs.duration ? 1 : 0;
-        return moodScore + companyScore + timeScore;
-      };
-      return score(b) - score(a);
-    });
-  }, [prefs, sortMode]);
-
-  const updateProfile = (patch: Partial<ProfileState>) => {
-    setProfile((current) => ({ ...current, ...patch }));
+  const setPrefsPatch = (patch: Partial<DiscoveryPreferences>, message?: string) => {
+    setState((current) => ({
+      ...current,
+      prefs: { ...current.prefs, ...patch },
+      updatedAt: Date.now(),
+    }));
+    if (message) showToast(message, "info");
   };
 
-  const showToast = (message: string, tone: Toast["tone"] = "success") => {
-    setToast({ id: Date.now(), message, tone });
+  const updateProfile = (patch: Partial<ProfileState>): boolean => {
+    const nextPatch = { ...patch };
+    if (patch.name !== undefined) {
+      const trimmed = patch.name.trim().slice(0, 40);
+      nextPatch.name = trimmed;
+      nextPatch.avatar = initialsFromName(trimmed);
+    }
+    const result = updateProfileFields(state, nextPatch, Date.now());
+    if (result.error) {
+      showToast(result.error, "error");
+      return false;
+    }
+    setState(result.state);
+    setProfileErrors({});
+    return true;
+  };
+
+  const setAvailability = (nextAvailability: ProfileState["availability"]) => {
+    const nextState = setAvailabilityLogic(state, nextAvailability, Date.now());
+    setState(nextState);
+    setClock(Date.now());
+    const nextView = getAvailabilityView(nextState.profile, Date.now());
+    showToast(
+      nextAvailability === "available"
+        ? nextState.profile.shareAvailability
+          ? `you're visible for a break · ${nextView.label}`
+          : "you're available, but availability sharing is off"
+        : nextAvailability === "busy"
+          ? "got it — focus time protected"
+          : "you're hidden until you say otherwise",
+      "info",
+    );
+  };
+
+  const setAvailabilityWindow = (window: AvailabilityWindow) => {
+    setState(setAvailabilityWindowLogic(state, window, Date.now()));
+    setClock(Date.now());
+    showToast(
+      window == null && state.profile.availability === "available"
+        ? "your availability will stay on until you change it"
+        : "availability window updated",
+      "info",
+    );
+  };
+
+  const toggleShareAvailability = () => {
+    updateProfile({ shareAvailability: !state.profile.shareAvailability });
+  };
+
+  const toggleShareProfile = () => {
+    updateProfile({ shareProfile: !state.profile.shareProfile });
   };
 
   const toggleSaved = (id: string) => {
-    setSavedIds((current) => {
-      const next = current.includes(id) ? current.filter((savedId) => savedId !== id) : [...current, id];
-      showToast(current.includes(id) ? "removed from your little collection" : "saved for a later little escape");
-      return next;
-    });
+    const wasSaved = state.savedIds.includes(id);
+    setState((current) => ({
+      ...current,
+      savedIds: toggleSavedId(current.savedIds, id),
+      updatedAt: Date.now(),
+    }));
+    showToast(wasSaved ? "removed from your little collection" : "saved for a later little escape");
+  };
+
+  const runFriendAction = (result: { state: EscapeState; error: string | null }, success: string) => {
+    if (result.error) {
+      showToast(result.error, "error");
+      return;
+    }
+    setState(result.state);
+    showToast(success);
+  };
+
+  const sendFriendRequest = (friendId: string) => {
+    runFriendAction(sendFriendRequestLogic(state, friendId, Date.now()), "friend request sent");
+  };
+  const acceptFriendRequest = (friendId: string) => {
+    runFriendAction(acceptFriendRequestLogic(state, friendId, Date.now()), "you're connected — say hi when you're free");
+  };
+  const rejectFriendRequest = (friendId: string) => {
+    runFriendAction(rejectFriendRequestLogic(state, friendId, Date.now()), "request declined");
+  };
+  const withdrawFriendRequest = (friendId: string) => {
+    runFriendAction(withdrawFriendRequestLogic(state, friendId, Date.now()), "request withdrawn");
+  };
+  const removeFriend = (friendId: string) => {
+    runFriendAction(removeFriendLogic(state, friendId, Date.now()), "removed from your people");
   };
 
   const inviteFriend = (friendId: string) => {
-    setInvitedIds((current) => (current.includes(friendId) ? current : [...current, friendId]));
-    showToast("invite sent! now we wait for the chai committee.");
+    const friend = friends.find((entry) => entry.id === friendId);
+    if (!friend) {
+      showToast("That classmate isn't in your directory.", "error");
+      return;
+    }
+    if (friend.relationship !== "friends") {
+      showToast("Accept a friend request before planning a break together.", "error");
+      return;
+    }
+    setPlanner({ item: defaultActivityFor(friend), friendIds: [friend.id], plan: null });
   };
 
-  const createPlan = (plan: Omit<PlanState, "createdAt">) => {
-    setLatestPlan({ ...plan, createdAt: new Date().toISOString() });
-    setPlanItem(null);
-    showToast("break plans: looking good.");
+  const openPlanner = (item: Activity | Place, friendIds: string[] = []) => {
+    setDetailItem(null);
+    setPlanner({ item, friendIds, plan: null });
   };
+
+  const openPlanEditor = (plan: Plan) => {
+    const item = activityById.get(plan.itemId) ?? placeById.get(plan.itemId);
+    if (!item) {
+      showToast("That plan's place is no longer in the catalog.", "error");
+      return;
+    }
+    setPlanner({ item, friendIds: plan.invitees.map((invitee) => invitee.friendId), plan });
+  };
+
+  const createPlan = (draft: PlanDraft): PlanResult => {
+    const now = Date.now();
+    const signature = JSON.stringify(draft);
+    if (
+      lastPlanSignature.current &&
+      lastPlanSignature.current.signature === signature &&
+      now - lastPlanSignature.current.at < 2500
+    ) {
+      return { state, error: "That plan is already saved.", plan: null };
+    }
+    const result = createPlanLogic(state, draft, now);
+    if (result.error) {
+      showToast(result.error, "error");
+      return result;
+    }
+    lastPlanSignature.current = { signature, at: now };
+    setState(result.state);
+    setPlanner(null);
+    showToast("break plan saved — find it on your dashboard");
+    return result;
+  };
+
+  const savePlanEdits = (planId: string, draft: PlanDraft): PlanResult => {
+    const result = updatePlanLogic(state, planId, draft, Date.now());
+    if (result.error) {
+      showToast(result.error, "error");
+      return result;
+    }
+    setState(result.state);
+    setPlanner(null);
+    showToast("plan updated");
+    return result;
+  };
+
+  const cancelPlan = (planId: string) => {
+    const result = cancelPlanLogic(state, planId, Date.now());
+    if (result.error) {
+      showToast(result.error, "error");
+      return;
+    }
+    setState(result.state);
+    showToast("plan cancelled — your calendar has room again", "info");
+  };
+
+  const respondToPlan = (planId: string, response: "accepted" | "declined") => {
+    const result = respondToPlanLogic(state, planId, response, Date.now());
+    if (result.error) {
+      showToast(result.error, "error");
+      return;
+    }
+    setState(result.state);
+    showToast(response === "accepted" ? "you're in — see you there" : "invitation declined", "info");
+  };
+
+  const openDetails = (item: Activity | Place) => setDetailItem(item);
 
   const jumpToRecommendations = () => {
     setView("discover");
-    window.setTimeout(() => document.getElementById("recommendations")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+    window.setTimeout(
+      () => document.getElementById("recommendations")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      60,
+    );
+  };
+
+  const jumpToPreferences = () => {
+    if (view !== "discover") {
+      setView("discover");
+      window.setTimeout(
+        () => document.getElementById("preferences")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+        80,
+      );
+      return;
+    }
+    document.getElementById("preferences")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const openPeople = () => {
+    setView("find");
+    setState((current) => ({ ...current, finderTab: "people", updatedAt: Date.now() }));
+  };
+
+  const openSpots = () => {
+    setView("find");
+    setState((current) => ({ ...current, finderTab: "spots", updatedAt: Date.now() }));
   };
 
   const contextValue: EscapeContextValue = {
     view,
     setView,
-    prefs,
-    setMood: (mood) => setPrefs((current) => ({ ...current, mood })),
-    setDuration: (duration) => setPrefs((current) => ({ ...current, duration })),
-    setBudget: (budget) => setPrefs((current) => ({ ...current, budget })),
-    setCompany: (company) => setPrefs((current) => ({ ...current, company })),
-    sortMode,
-    setSortMode,
-    recommendations,
-    savedIds,
-    isSaved: (id) => savedIds.includes(id),
+    prefs: state.prefs,
+    setMood: (mood) => setPrefsPatch({ mood }),
+    setDuration: (duration) => setPrefsPatch({ duration }),
+    setBudget: (budget) => setPrefsPatch({ budget }),
+    setCompany: (company) => setPrefsPatch({ company }),
+    finderTab: state.finderTab,
+    setFinderTab: (tab) => setState((current) => ({ ...current, finderTab: tab, updatedAt: Date.now() })),
+    sortMode: state.sortMode,
+    setSortMode: (mode) => setState((current) => ({ ...current, sortMode: mode, updatedAt: Date.now() })),
+    savedIds: state.savedIds,
+    isSaved: (id) => state.savedIds.includes(id),
     toggleSaved,
-    profile,
+    profile: state.profile,
+    profileErrors,
     updateProfile,
-    setAvailability: (availability) => {
-      updateProfile({ availability });
-      showToast(availability === "available" ? "you’re visible for a little break" : availability === "busy" ? "got it — focus time protected" : "you’re hidden until you say otherwise", "info");
-    },
-    finderTab,
-    setFinderTab,
-    invitedIds,
+    availability,
+    setAvailability,
+    setAvailabilityWindow,
+    toggleShareAvailability,
+    toggleShareProfile,
     friends,
+    availableFriends,
+    acceptedFriends,
+    incomingRequests,
+    outgoingRequests,
+    friendRequestCounts,
+    sendFriendRequest,
+    acceptFriendRequest,
+    rejectFriendRequest,
+    withdrawFriendRequest,
+    removeFriend,
     inviteFriend,
-    detailItem,
-    openDetails: setDetailItem,
-    closeDetails: () => setDetailItem(null),
-    planItem,
-    openPlanner: setPlanItem,
-    closePlanner: () => setPlanItem(null),
+    plans: state.plans,
+    planBuckets,
+    nextPlan,
+    pendingInviteCount: planBuckets.invites.length,
     createPlan,
-    latestPlan,
+    savePlanEdits,
+    cancelPlan,
+    respondToPlan,
+    validatePlan: (draft, editingPlanId) => validatePlanDraft(draft, state, Date.now(), editingPlanId),
+    detailItem,
+    openDetails,
+    closeDetails: () => setDetailItem(null),
+    planner,
+    openPlanner,
+    openPlanEditor,
+    closePlanner: () => setPlanner(null),
+    plansOpen,
+    openPlans: () => setPlansOpen(true),
+    closePlans: () => setPlansOpen(false),
     toast,
     showToast,
     clearToast: () => setToast(null),
     jumpToRecommendations,
+    jumpToPreferences,
+    openPeople,
+    openSpots,
+    storageWarning: initial.warning,
   };
 
   return <EscapeContext.Provider value={contextValue}>{children}</EscapeContext.Provider>;
 }
-
-const EscapeContext = createContext<EscapeContextValue | null>(null);
 
 export function useEscape() {
   const context = useContext(EscapeContext);
@@ -272,7 +575,10 @@ export function useEscape() {
 }
 
 export function getSavedItems(ids: string[]) {
-  return ids.map((id) => activityById.get(id) ?? placeById.get(id)).filter(Boolean) as DetailItem[];
+  return ids
+    .map((id) => activityById.get(id) ?? placeById.get(id))
+    .filter((item): item is Activity | Place => Boolean(item));
 }
 
-export { friends, places };
+export { activities, activityById, placeById };
+export type { FinderTab, Friend };

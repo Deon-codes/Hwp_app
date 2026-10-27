@@ -22,6 +22,7 @@ export type Budget = 0 | 50 | 100 | 200;
 export type BreakDuration = 10 | 15 | 30 | 45 | 60;
 export type Availability = "available" | "busy" | "hidden";
 export type FinderTab = "spots" | "people";
+export type AvailabilityWindow = 30 | 60 | 120 | null;
 
 export type IllustrationTone = "yellow" | "mint" | "coral" | "lavender" | "blue" | "paper";
 
@@ -54,9 +55,20 @@ export type Place = {
   tone: IllustrationTone;
   tags: string[];
   addressHint: string;
+  /** Only filled when the project has reliable opening-hours data. */
+  openHours?: string;
+  /** Only filled when the project has a reliable map destination. */
+  mapUrl?: string;
   matchLine: string;
 };
 
+export type FriendRelationship = "friends" | "incoming" | "outgoing" | "none";
+
+/**
+ * A demo classmate. These records are fictional seed data, not registered
+ * accounts. The state layer adds the current user's relationship and the
+ * presence values that classmates have chosen to share.
+ */
 export type Friend = {
   id: string;
   name: string;
@@ -65,7 +77,28 @@ export type Friend = {
   mood: Mood;
   tone: IllustrationTone;
   available: boolean;
+  interests: Mood[];
+  bio: string;
+  expiresAt: number | null;
+  relationship: FriendRelationship;
 };
+
+export type DemoFriend = {
+  id: string;
+  name: string;
+  initials: string;
+  tone: IllustrationTone;
+  defaultStatus: string;
+  defaultMood: Mood;
+  defaultAvailable: boolean;
+  defaultWindowMin: number | null;
+  interests: Mood[];
+  bio: string;
+  seedRelationship: Exclude<FriendRelationship, "none"> | "none";
+};
+
+export const DEMO_DIRECTORY_LABEL =
+  "Fictional demo classmates — not real registered accounts. Availability is simulated and never shared outside this browser.";
 
 export const moods: Array<{
   name: Mood;
@@ -110,7 +143,7 @@ export const activities: Activity[] = [
     social: "both",
     icon: Flower2,
     tone: "mint",
-    tags: ["sunshine", "greenery", "reset"],
+    tags: ["sunshine", "greenery", "reset", "walk"],
     matchLine: "A free little breathing room moment that fits between lectures.",
   },
   {
@@ -125,7 +158,7 @@ export const activities: Activity[] = [
     social: "both",
     icon: Utensils,
     tone: "yellow",
-    tags: ["quick bite", "canteen", "under 50"],
+    tags: ["quick bite", "canteen", "under 50", "samosa"],
     matchLine: "The speedy, under-₹50 answer to a very real snack situation.",
   },
   {
@@ -140,7 +173,7 @@ export const activities: Activity[] = [
     social: "friends",
     icon: Dumbbell,
     tone: "yellow",
-    tags: ["rally", "friendly", "energy"],
+    tags: ["rally", "friendly", "energy", "sport"],
     matchLine: "Good for a group break when you want to come back brighter.",
   },
   {
@@ -170,7 +203,7 @@ export const activities: Activity[] = [
     social: "solo",
     icon: BookOpen,
     tone: "paper",
-    tags: ["quiet", "books", "recharge"],
+    tags: ["quiet", "books", "recharge", "study"],
     matchLine: "A calm corner for focus mode without the pressure to perform.",
   },
   {
@@ -203,6 +236,36 @@ export const activities: Activity[] = [
     tags: ["wander", "camera roll", "curious"],
     matchLine: "A small adventure that turns the usual route into something new.",
   },
+  {
+    id: "sunset-sketch",
+    name: "Ten-minute rooftop sketch",
+    description: "One page, one skyline, zero pressure to make it good.",
+    category: "Wander",
+    moods: ["Chill", "Explore", "Focus"],
+    price: 0,
+    durationMin: 10,
+    walkMin: 6,
+    social: "solo",
+    icon: Sparkles,
+    tone: "lavender",
+    tags: ["art", "rooftop", "quiet", "sunset"],
+    matchLine: "A tiny creative reset when you want your brain somewhere else for a minute.",
+  },
+  {
+    id: "board-game-corner",
+    name: "Board game corner",
+    description: "One quick round of something silly with whoever is already around.",
+    category: "Play",
+    moods: ["Play", "Social"],
+    price: 0,
+    durationMin: 30,
+    walkMin: 4,
+    social: "friends",
+    icon: Gamepad2,
+    tone: "mint",
+    tags: ["games", "friends", "indoor"],
+    matchLine: "Low-effort company that still feels like a proper break.",
+  },
 ];
 
 export const places: Place[] = [
@@ -217,7 +280,7 @@ export const places: Place[] = [
     walkMin: 4,
     icon: Utensils,
     tone: "yellow",
-    tags: ["quick bite", "lively", "under 50"],
+    tags: ["quick bite", "lively", "under 50", "food"],
     addressHint: "near the east lecture lawn",
     matchLine: "Bright, familiar, and close enough for a snack before your next thing.",
   },
@@ -232,7 +295,7 @@ export const places: Place[] = [
     walkMin: 3,
     icon: Coffee,
     tone: "coral",
-    tags: ["chai", "catch-up", "favourite"],
+    tags: ["chai", "catch-up", "favourite", "tea"],
     addressHint: "under the old banyan tree",
     matchLine: "Made for a quick catch-up, with plenty of chai committee energy.",
   },
@@ -247,7 +310,7 @@ export const places: Place[] = [
     walkMin: 5,
     icon: Flower2,
     tone: "mint",
-    tags: ["greenery", "sunshine", "slow"],
+    tags: ["greenery", "sunshine", "slow", "park"],
     addressHint: "behind the arts block",
     matchLine: "Your cue to go touch some grass, gently.",
   },
@@ -262,7 +325,7 @@ export const places: Place[] = [
     walkMin: 7,
     icon: Dumbbell,
     tone: "yellow",
-    tags: ["rally", "move", "friendly"],
+    tags: ["rally", "move", "friendly", "recreation"],
     addressHint: "past the student centre",
     matchLine: "A good fit for friendly chaos and a little extra energy.",
   },
@@ -292,23 +355,170 @@ export const places: Place[] = [
     walkMin: 6,
     icon: BookOpen,
     tone: "paper",
-    tags: ["quiet", "read", "reset"],
+    tags: ["quiet", "read", "reset", "study"],
     addressHint: "second floor, west wing",
     matchLine: "The calmest place on the list for a quiet corner kind of day.",
   },
+  {
+    id: "place-cafe",
+    name: "Corner café",
+    description: "A small coffee counter with window seats, a chalkboard menu and a decent playlist.",
+    category: "Café",
+    moods: ["Chill", "Social", "Hungry"],
+    price: 60,
+    durationMin: 25,
+    walkMin: 4,
+    icon: Coffee,
+    tone: "lavender",
+    tags: ["coffee", "window seat", "catch-up"],
+    addressHint: "ground floor of the arts block",
+    matchLine: "A proper coffee break when the canteen feels a little too loud.",
+  },
+  {
+    id: "place-study-lounge",
+    name: "Study lounge",
+    description: "Long tables, plug points and a shared agreement about quiet voices.",
+    category: "Study space",
+    moods: ["Focus", "Chill"],
+    price: 0,
+    durationMin: 45,
+    walkMin: 5,
+    icon: BookOpen,
+    tone: "blue",
+    tags: ["study", "plug points", "quiet", "wifi"],
+    addressHint: "first floor of the library annex",
+    matchLine: "Built for a focused half hour without disappearing for the afternoon.",
+  },
+  {
+    id: "place-amphitheatre",
+    name: "Open-air amphitheatre",
+    description: "Wide steps, a bit of shade and space for an impromptu group hangout.",
+    category: "Social spot",
+    moods: ["Social", "Explore", "Play"],
+    price: 0,
+    durationMin: 30,
+    walkMin: 8,
+    icon: Users,
+    tone: "mint",
+    tags: ["outdoor", "group", "music", "hangout"],
+    addressHint: "between the design block and the sports field",
+    matchLine: "A good group base when the plan is simply to be outside together.",
+  },
 ];
 
-export const friends: Friend[] = [
-  { id: "friend-aisha", name: "Aisha", initials: "AS", status: "free for chai", mood: "Social", tone: "coral", available: true },
-  { id: "friend-rohan", name: "Rohan", initials: "RK", status: "up for a walk", mood: "Explore", tone: "blue", available: true },
-  { id: "friend-meera", name: "Meera", initials: "MP", status: "down for snacks", mood: "Hungry", tone: "yellow", available: true },
-  { id: "friend-dev", name: "Dev", initials: "DV", status: "quiet break today", mood: "Chill", tone: "lavender", available: true },
-  { id: "friend-sana", name: "Sana", initials: "SN", status: "five-minute sunshine", mood: "Chill", tone: "mint", available: false },
-  { id: "friend-ian", name: "Ian", initials: "IN", status: "in focus mode", mood: "Focus", tone: "paper", available: false },
+export const demoFriends: DemoFriend[] = [
+  {
+    id: "friend-aisha",
+    name: "Aisha",
+    initials: "AS",
+    tone: "coral",
+    defaultStatus: "free for chai",
+    defaultMood: "Social",
+    defaultAvailable: true,
+    defaultWindowMin: 60,
+    interests: ["Social", "Hungry"],
+    bio: "Chai loyalist. Will always pick the table near the window.",
+    seedRelationship: "friends",
+  },
+  {
+    id: "friend-rohan",
+    name: "Rohan",
+    initials: "RK",
+    tone: "blue",
+    defaultStatus: "up for a walk",
+    defaultMood: "Explore",
+    defaultAvailable: true,
+    defaultWindowMin: 45,
+    interests: ["Explore", "Chill"],
+    bio: "Takes the long route on purpose. Knows where the good shade is.",
+    seedRelationship: "friends",
+  },
+  {
+    id: "friend-meera",
+    name: "Meera",
+    initials: "MP",
+    tone: "yellow",
+    defaultStatus: "down for snacks",
+    defaultMood: "Hungry",
+    defaultAvailable: true,
+    defaultWindowMin: 30,
+    interests: ["Hungry", "Social"],
+    bio: "Snack scout. Has strong opinions about the canteen's best item.",
+    seedRelationship: "friends",
+  },
+  {
+    id: "friend-dev",
+    name: "Dev",
+    initials: "DV",
+    tone: "lavender",
+    defaultStatus: "quiet break today",
+    defaultMood: "Chill",
+    defaultAvailable: true,
+    defaultWindowMin: 60,
+    interests: ["Chill", "Focus"],
+    bio: "Usually found in a quiet corner with headphones on.",
+    seedRelationship: "incoming",
+  },
+  {
+    id: "friend-sana",
+    name: "Sana",
+    initials: "SN",
+    tone: "mint",
+    defaultStatus: "five-minute sunshine",
+    defaultMood: "Chill",
+    defaultAvailable: false,
+    defaultWindowMin: null,
+    interests: ["Chill", "Focus"],
+    bio: "Believes in short walks and long lunches.",
+    seedRelationship: "outgoing",
+  },
+  {
+    id: "friend-ian",
+    name: "Ian",
+    initials: "IN",
+    tone: "paper",
+    defaultStatus: "in focus mode",
+    defaultMood: "Focus",
+    defaultAvailable: false,
+    defaultWindowMin: null,
+    interests: ["Focus", "Play"],
+    bio: "Library regular. Occasionally persuaded into table tennis.",
+    seedRelationship: "none",
+  },
+  {
+    id: "friend-priya",
+    name: "Priya",
+    initials: "PR",
+    tone: "blue",
+    defaultStatus: "wandering after class",
+    defaultMood: "Explore",
+    defaultAvailable: true,
+    defaultWindowMin: 90,
+    interests: ["Explore", "Social"],
+    bio: "Camera roll full of campus corners nobody else noticed.",
+    seedRelationship: "none",
+  },
+  {
+    id: "friend-kabir",
+    name: "Kabir",
+    initials: "KB",
+    tone: "coral",
+    defaultStatus: "up for a quick game",
+    defaultMood: "Play",
+    defaultAvailable: true,
+    defaultWindowMin: null,
+    interests: ["Play", "Social"],
+    bio: "Always carrying a badminton racket for some reason.",
+    seedRelationship: "none",
+  },
 ];
 
 export const activityById = new Map(activities.map((activity) => [activity.id, activity]));
 export const placeById = new Map(places.map((place) => [place.id, place]));
+export const friendById = new Map(demoFriends.map((friend) => [friend.id, friend]));
+
+export const spotCategories = Array.from(new Set(places.map((place) => place.category)));
+export const activityCategories = Array.from(new Set(activities.map((activity) => activity.category)));
 
 export function formatPrice(price: number) {
   return price === 0 ? "Free" : `₹${price} est.`;
@@ -321,6 +531,12 @@ export function formatDuration(duration: number) {
 export function getBudgetLabel(budget: Budget) {
   if (budget === 0) return "Free";
   return `Under ₹${budget}`;
+}
+
+export function formatPlanDate(date: string) {
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
 export const categoryIcon = {
@@ -338,3 +554,5 @@ export const smallMapPins = [
   { label: "library", left: "71%", top: "71%", tone: "paper" as IllustrationTone },
   { label: "sports", left: "35%", top: "73%", tone: "yellow" as IllustrationTone },
 ];
+
+export { MapPin };
