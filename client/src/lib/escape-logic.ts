@@ -18,8 +18,19 @@ import {
   placeById,
   places,
 } from "./escape-data";
+import {
+  badgesCatalog,
+  challengeById,
+  challengesList,
+  isGreenSpaceItem,
+  isStudyItem,
+  type ChallengeBadge,
+  type ChallengeCadence,
+  type ChallengeCategory,
+  type ChallengeDefinition,
+} from "./escape-challenges-data";
 
-export type View = "discover" | "find" | "saved" | "profile";
+export type View = "discover" | "find" | "saved" | "profile" | "challenges";
 export type SortMode = "best" | "shortest" | "lowest";
 export type CatalogSort = "best" | "closest" | "cheapest" | "quickest";
 export type DetailItem = Activity | Place;
@@ -115,6 +126,52 @@ export type PlanTiming = {
   status: PlanTimingStatus;
 };
 
+export type ActiveDetoxTimer = {
+  startedAt: number;
+  durationSeconds: number;
+};
+
+export type CompletedStudyRecord = {
+  id: string;
+  friendId?: string;
+  planId?: string;
+  note?: string;
+  completedAt: number;
+};
+
+export type CompletedGreenRecord = {
+  id: string;
+  itemId: string;
+  completedAt: number;
+};
+
+export type CompletedDetoxRecord = {
+  id: string;
+  completedAt: number;
+  durationMinutes: number;
+};
+
+export type CompletedChaiRecord = {
+  id: string;
+  friendId?: string;
+  planId?: string;
+  completedAt: number;
+};
+
+export type ChallengesState = {
+  discoveredPlaceIds: string[];
+  completedChallengeIds: string[];
+  repeatableCompletions: Record<string, number>;
+  activeDetoxTimer: ActiveDetoxTimer | null;
+  completedStudySessions: CompletedStudyRecord[];
+  completedGreenEscapes: CompletedGreenRecord[];
+  completedDetoxSessions: CompletedDetoxRecord[];
+  completedChaiSessions: CompletedChaiRecord[];
+  earnedBadgeIds: string[];
+  points: number;
+  lastAwardedAt: Record<string, number>;
+};
+
 export type EscapeState = {
   version: typeof ESCAPE_STATE_VERSION;
   profile: ProfileState;
@@ -125,6 +182,7 @@ export type EscapeState = {
   connections: Connection[];
   presence: FriendPresence[];
   plans: Plan[];
+  challenges: ChallengesState;
   createdAt: number;
   updatedAt: number;
 };
@@ -332,6 +390,22 @@ function seedPastPlan(now: number): Plan {
   };
 }
 
+export function createDefaultChallengesState(now = Date.now()): ChallengesState {
+  return {
+    discoveredPlaceIds: [],
+    completedChallengeIds: [],
+    repeatableCompletions: {},
+    activeDetoxTimer: null,
+    completedStudySessions: [],
+    completedGreenEscapes: [],
+    completedDetoxSessions: [],
+    completedChaiSessions: [],
+    earnedBadgeIds: [],
+    points: 0,
+    lastAwardedAt: {},
+  };
+}
+
 export function createDefaultState(now = Date.now()): EscapeState {
   return {
     version: ESCAPE_STATE_VERSION,
@@ -343,6 +417,7 @@ export function createDefaultState(now = Date.now()): EscapeState {
     connections: seedConnections(now),
     presence: seedPresence(now),
     plans: [seedIncomingPlan(now), seedPastPlan(now)],
+    challenges: createDefaultChallengesState(now),
     createdAt: now,
     updatedAt: now,
   };
@@ -459,6 +534,128 @@ function normalizePlan(raw: unknown, now: number): Plan | null {
   };
 }
 
+export function normalizeChallenges(raw: unknown, now = Date.now()): ChallengesState {
+  const base = createDefaultChallengesState(now);
+  if (!raw || typeof raw !== "object") return base;
+  const value = raw as Partial<Record<keyof ChallengesState, unknown>>;
+
+  const discoveredPlaceIds = safeArray(value.discoveredPlaceIds)
+    .filter((id): id is string => typeof id === "string" && placeById.has(id));
+
+  const completedChallengeIds = safeArray(value.completedChallengeIds)
+    .filter((id): id is string => typeof id === "string" && challengeById.has(id));
+
+  const earnedBadgeIds = safeArray(value.earnedBadgeIds)
+    .filter((id): id is string => typeof id === "string" && badgesCatalog.some((b) => b.id === id));
+
+  const repeatableCompletions: Record<string, number> = {};
+  if (value.repeatableCompletions && typeof value.repeatableCompletions === "object") {
+    for (const [key, count] of Object.entries(value.repeatableCompletions)) {
+      if (typeof count === "number" && Number.isFinite(count) && count >= 0) {
+        repeatableCompletions[key] = Math.floor(count);
+      }
+    }
+  }
+
+  let activeDetoxTimer: ActiveDetoxTimer | null = null;
+  if (value.activeDetoxTimer && typeof value.activeDetoxTimer === "object") {
+    const timer = value.activeDetoxTimer as Partial<ActiveDetoxTimer>;
+    const startedAt = Number(timer.startedAt);
+    const durationSeconds = Number(timer.durationSeconds);
+    if (
+      Number.isFinite(startedAt) &&
+      startedAt > 0 &&
+      startedAt <= now + 60_000 &&
+      Number.isFinite(durationSeconds) &&
+      durationSeconds >= 5 &&
+      durationSeconds <= 7200
+    ) {
+      activeDetoxTimer = { startedAt, durationSeconds };
+    }
+  }
+
+  const completedStudySessions = safeArray(value.completedStudySessions)
+    .map((entry): CompletedStudyRecord | null => {
+      if (!entry || typeof entry !== "object") return null;
+      const rec = entry as Partial<CompletedStudyRecord>;
+      if (typeof rec.id !== "string") return null;
+      return {
+        id: rec.id,
+        friendId: typeof rec.friendId === "string" ? rec.friendId : undefined,
+        planId: typeof rec.planId === "string" ? rec.planId : undefined,
+        note: typeof rec.note === "string" ? rec.note.slice(0, 140) : undefined,
+        completedAt: typeof rec.completedAt === "number" ? rec.completedAt : now,
+      };
+    })
+    .filter((entry): entry is CompletedStudyRecord => Boolean(entry));
+
+  const completedGreenEscapes = safeArray(value.completedGreenEscapes)
+    .map((entry): CompletedGreenRecord | null => {
+      if (!entry || typeof entry !== "object") return null;
+      const rec = entry as Partial<CompletedGreenRecord>;
+      if (typeof rec.id !== "string" || typeof rec.itemId !== "string") return null;
+      return {
+        id: rec.id,
+        itemId: rec.itemId,
+        completedAt: typeof rec.completedAt === "number" ? rec.completedAt : now,
+      };
+    })
+    .filter((entry): entry is CompletedGreenRecord => Boolean(entry));
+
+  const completedDetoxSessions = safeArray(value.completedDetoxSessions)
+    .map((entry): CompletedDetoxRecord | null => {
+      if (!entry || typeof entry !== "object") return null;
+      const rec = entry as Partial<CompletedDetoxRecord>;
+      if (typeof rec.id !== "string") return null;
+      return {
+        id: rec.id,
+        completedAt: typeof rec.completedAt === "number" ? rec.completedAt : now,
+        durationMinutes: typeof rec.durationMinutes === "number" ? rec.durationMinutes : 15,
+      };
+    })
+    .filter((entry): entry is CompletedDetoxRecord => Boolean(entry));
+
+  const completedChaiSessions = safeArray(value.completedChaiSessions)
+    .map((entry): CompletedChaiRecord | null => {
+      if (!entry || typeof entry !== "object") return null;
+      const rec = entry as Partial<CompletedChaiRecord>;
+      if (typeof rec.id !== "string") return null;
+      return {
+        id: rec.id,
+        friendId: typeof rec.friendId === "string" ? rec.friendId : undefined,
+        planId: typeof rec.planId === "string" ? rec.planId : undefined,
+        completedAt: typeof rec.completedAt === "number" ? rec.completedAt : now,
+      };
+    })
+    .filter((entry): entry is CompletedChaiRecord => Boolean(entry));
+
+  const rawPoints = Number(value.points);
+  const points = Number.isFinite(rawPoints) && rawPoints >= 0 ? Math.floor(rawPoints) : 0;
+
+  const lastAwardedAt: Record<string, number> = {};
+  if (value.lastAwardedAt && typeof value.lastAwardedAt === "object") {
+    for (const [key, ts] of Object.entries(value.lastAwardedAt)) {
+      if (typeof ts === "number" && Number.isFinite(ts)) {
+        lastAwardedAt[key] = ts;
+      }
+    }
+  }
+
+  return {
+    discoveredPlaceIds: Array.from(new Set(discoveredPlaceIds)),
+    completedChallengeIds: Array.from(new Set(completedChallengeIds)),
+    repeatableCompletions,
+    activeDetoxTimer,
+    completedStudySessions,
+    completedGreenEscapes,
+    completedDetoxSessions,
+    completedChaiSessions,
+    earnedBadgeIds: Array.from(new Set(earnedBadgeIds)),
+    points,
+    lastAwardedAt,
+  };
+}
+
 /** Repairs partially-written, older, or hand-edited stored state. */
 export function normalizeState(raw: unknown, now = Date.now()): EscapeState {
   const base = createDefaultState(now);
@@ -521,6 +718,7 @@ export function normalizeState(raw: unknown, now = Date.now()): EscapeState {
     connections,
     presence,
     plans,
+    challenges: normalizeChallenges(value.challenges, now),
     createdAt: typeof value.createdAt === "number" ? value.createdAt : now,
     updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : now,
   };
@@ -1228,5 +1426,591 @@ export function updateProfileFields(
   return {
     state: touch(state, now, { profile: nextProfile }),
     error: null,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Challenges & Gamification Logic                                    */
+/* ------------------------------------------------------------------ */
+
+export type PlaceDiscoveryResult = {
+  state: EscapeState;
+  isNewDiscovery: boolean;
+  awarded: boolean;
+  challengeCompleted?: string;
+  badgeEarned?: string;
+  pointsEarned?: number;
+};
+
+export function recordPlaceDiscovery(
+  state: EscapeState,
+  placeId: string,
+  now = Date.now(),
+): PlaceDiscoveryResult {
+  if (!placeById.has(placeId)) {
+    return { state, isNewDiscovery: false, awarded: false };
+  }
+
+  const existing = state.challenges.discoveredPlaceIds;
+  const isNewDiscovery = !existing.includes(placeId);
+  if (!isNewDiscovery) {
+    return { state, isNewDiscovery: false, awarded: false };
+  }
+
+  const nextDiscovered = [...existing, placeId];
+  let pointsEarned = 0;
+  let challengeCompleted: string | undefined;
+  let badgeEarned: string | undefined;
+
+  const completed = [...state.challenges.completedChallengeIds];
+  const badges = [...state.challenges.earnedBadgeIds];
+  const lastAwardedAt = { ...state.challenges.lastAwardedAt };
+
+  // Check Campus Explorer challenge (requires 3 distinct places)
+  if (nextDiscovered.length >= 3 && !completed.includes("campus-explorer")) {
+    completed.push("campus-explorer");
+    pointsEarned += 150;
+    challengeCompleted = "campus-explorer";
+    lastAwardedAt["campus-explorer"] = now;
+    if (!badges.includes("badge-explorer-scout")) {
+      badges.push("badge-explorer-scout");
+      badgeEarned = "badge-explorer-scout";
+    }
+  }
+
+  const nextChallenges: ChallengesState = {
+    ...state.challenges,
+    discoveredPlaceIds: nextDiscovered,
+    completedChallengeIds: completed,
+    earnedBadgeIds: badges,
+    points: state.challenges.points + pointsEarned,
+    lastAwardedAt,
+  };
+
+  return {
+    state: touch(state, now, { challenges: nextChallenges }),
+    isNewDiscovery: true,
+    awarded: pointsEarned > 0,
+    challengeCompleted,
+    badgeEarned,
+    pointsEarned: pointsEarned > 0 ? pointsEarned : undefined,
+  };
+}
+
+export function startDetoxTimer(
+  state: EscapeState,
+  durationSeconds = 15 * 60,
+  now = Date.now(),
+): { state: EscapeState; error: string | null } {
+  const currentTimer = state.challenges.activeDetoxTimer;
+  if (currentTimer) {
+    const finishesAt = currentTimer.startedAt + currentTimer.durationSeconds * 1000;
+    if (now < finishesAt) {
+      return { state, error: "A digital detox timer is already counting down." };
+    }
+  }
+
+  const nextChallenges: ChallengesState = {
+    ...state.challenges,
+    activeDetoxTimer: {
+      startedAt: now,
+      durationSeconds,
+    },
+  };
+
+  return {
+    state: touch(state, now, { challenges: nextChallenges }),
+    error: null,
+  };
+}
+
+export function cancelDetoxTimer(state: EscapeState, now = Date.now()): EscapeState {
+  if (!state.challenges.activeDetoxTimer) return state;
+  return touch(state, now, {
+    challenges: {
+      ...state.challenges,
+      activeDetoxTimer: null,
+    },
+  });
+}
+
+export type ClaimDetoxResult = {
+  state: EscapeState;
+  error: string | null;
+  pointsEarned?: number;
+  badgeEarned?: string;
+};
+
+export function claimDetoxTimer(state: EscapeState, now = Date.now()): ClaimDetoxResult {
+  const timer = state.challenges.activeDetoxTimer;
+  if (!timer) {
+    return { state, error: "No active detox timer to complete." };
+  }
+
+  const finishesAt = timer.startedAt + timer.durationSeconds * 1000;
+  if (now < finishesAt) {
+    const remainingSeconds = Math.ceil((finishesAt - now) / 1000);
+    const min = Math.ceil(remainingSeconds / 60);
+    return { state, error: `Timer not finished yet (${min} min remaining). Step away from screens!` };
+  }
+
+  // Prevent accidental rapid duplicate claim
+  const lastClaimed = state.challenges.lastAwardedAt["digital-detox"] || 0;
+  if (now - lastClaimed < 2000) {
+    return { state, error: "Detox reward was just claimed." };
+  }
+
+  const pointsEarned = 100;
+  const badges = [...state.challenges.earnedBadgeIds];
+  let badgeEarned: string | undefined;
+  if (!badges.includes("badge-zen-master")) {
+    badges.push("badge-zen-master");
+    badgeEarned = "badge-zen-master";
+  }
+
+  const completed = state.challenges.completedChallengeIds.includes("digital-detox")
+    ? state.challenges.completedChallengeIds
+    : [...state.challenges.completedChallengeIds, "digital-detox"];
+
+  const repeatableCompletions = {
+    ...state.challenges.repeatableCompletions,
+    "digital-detox": (state.challenges.repeatableCompletions["digital-detox"] || 0) + 1,
+  };
+
+  const sessionRecord: CompletedDetoxRecord = {
+    id: `detox-${now}`,
+    completedAt: now,
+    durationMinutes: Math.round(timer.durationSeconds / 60),
+  };
+
+  const nextChallenges: ChallengesState = {
+    ...state.challenges,
+    activeDetoxTimer: null,
+    completedDetoxSessions: [sessionRecord, ...state.challenges.completedDetoxSessions],
+    completedChallengeIds: completed,
+    repeatableCompletions,
+    earnedBadgeIds: badges,
+    points: state.challenges.points + pointsEarned,
+    lastAwardedAt: {
+      ...state.challenges.lastAwardedAt,
+      "digital-detox": now,
+    },
+  };
+
+  return {
+    state: touch(state, now, { challenges: nextChallenges }),
+    error: null,
+    pointsEarned,
+    badgeEarned,
+  };
+}
+
+export type StudySessionResult = {
+  state: EscapeState;
+  error: string | null;
+  pointsEarned?: number;
+  badgeEarned?: string;
+};
+
+export function recordStudySession(
+  state: EscapeState,
+  params: { friendId?: string; planId?: string; note?: string },
+  now = Date.now(),
+): StudySessionResult {
+  if (!params.friendId && !params.planId) {
+    return { state, error: "Choose a classmate or existing plan to record your study session." };
+  }
+
+  // Duplicate plan prevention
+  if (params.planId) {
+    const existing = state.challenges.completedStudySessions.some((s) => s.planId === params.planId);
+    if (existing) {
+      return { state, error: "This study plan has already been recorded for a challenge reward." };
+    }
+  }
+
+  // Demo friend check
+  if (params.friendId) {
+    if (!friendById.has(params.friendId)) {
+      return { state, error: "Classmate not found in directory." };
+    }
+    // Prevent rapid duplicate recording with the same friend within 10 seconds
+    const recent = state.challenges.completedStudySessions.find(
+      (s) => s.friendId === params.friendId && now - s.completedAt < 10_000,
+    );
+    if (recent) {
+      return { state, error: "A study session with this friend was recorded a moment ago." };
+    }
+  }
+
+  // Debounce duplicate claim
+  const lastClaimed = state.challenges.lastAwardedAt["study-buddy"] || 0;
+  if (now - lastClaimed < 1500) {
+    return { state, error: "Reward recently claimed." };
+  }
+
+  const recordId = params.planId
+    ? `study-plan-${params.planId}`
+    : `study-${params.friendId}-${now}`;
+
+  const record: CompletedStudyRecord = {
+    id: recordId,
+    friendId: params.friendId,
+    planId: params.planId,
+    note: params.note?.trim() || undefined,
+    completedAt: now,
+  };
+
+  const isFirstCompletion = !state.challenges.completedChallengeIds.includes("study-buddy");
+  const pointsEarned = 120;
+  const badges = [...state.challenges.earnedBadgeIds];
+  let badgeEarned: string | undefined;
+
+  if (!badges.includes("badge-study-squad")) {
+    badges.push("badge-study-squad");
+    badgeEarned = "badge-study-squad";
+  }
+
+  const completed = isFirstCompletion
+    ? [...state.challenges.completedChallengeIds, "study-buddy"]
+    : state.challenges.completedChallengeIds;
+
+  const repeatableCompletions = {
+    ...state.challenges.repeatableCompletions,
+    "study-buddy": (state.challenges.repeatableCompletions["study-buddy"] || 0) + 1,
+  };
+
+  const nextChallenges: ChallengesState = {
+    ...state.challenges,
+    completedStudySessions: [record, ...state.challenges.completedStudySessions],
+    completedChallengeIds: completed,
+    repeatableCompletions,
+    earnedBadgeIds: badges,
+    points: state.challenges.points + pointsEarned,
+    lastAwardedAt: {
+      ...state.challenges.lastAwardedAt,
+      "study-buddy": now,
+    },
+  };
+
+  return {
+    state: touch(state, now, { challenges: nextChallenges }),
+    error: null,
+    pointsEarned,
+    badgeEarned,
+  };
+}
+
+export type GreenEscapeResult = {
+  state: EscapeState;
+  error: string | null;
+  pointsEarned?: number;
+  badgeEarned?: string;
+};
+
+export function recordGreenEscape(
+  state: EscapeState,
+  itemId: string,
+  now = Date.now(),
+): GreenEscapeResult {
+  const isQualifying =
+    isGreenSpaceItem(itemId) ||
+    (placeById.has(itemId) && placeById.get(itemId)?.category === "Green space") ||
+    (activityById.has(itemId) && activityById.get(itemId)?.tags.includes("greenery"));
+
+  if (!isQualifying) {
+    return { state, error: "That spot or activity doesn't qualify as a green space." };
+  }
+
+  // Count distinct qualifying activities or valid recorded completions
+  const alreadyVisitedThisItem = state.challenges.completedGreenEscapes.some((g) => g.itemId === itemId);
+  if (alreadyVisitedThisItem) {
+    // If already visited this exact item, prevent immediate duplicate within 30 minutes
+    const recent = state.challenges.completedGreenEscapes.find(
+      (g) => g.itemId === itemId && now - g.completedAt < 30 * 60_000,
+    );
+    if (recent) {
+      return { state, error: "This green space visit was recently recorded." };
+    }
+  }
+
+  // Debounce
+  const lastClaimed = state.challenges.lastAwardedAt["green-escape"] || 0;
+  if (now - lastClaimed < 1500) {
+    return { state, error: "Reward recently claimed." };
+  }
+
+  const record: CompletedGreenRecord = {
+    id: `green-${itemId}-${now}`,
+    itemId,
+    completedAt: now,
+  };
+
+  const isFirstCompletion = !state.challenges.completedChallengeIds.includes("green-escape");
+  const pointsEarned = 80;
+  const badges = [...state.challenges.earnedBadgeIds];
+  let badgeEarned: string | undefined;
+
+  if (!badges.includes("badge-green-thumb")) {
+    badges.push("badge-green-thumb");
+    badgeEarned = "badge-green-thumb";
+  }
+
+  const completed = isFirstCompletion
+    ? [...state.challenges.completedChallengeIds, "green-escape"]
+    : state.challenges.completedChallengeIds;
+
+  const repeatableCompletions = {
+    ...state.challenges.repeatableCompletions,
+    "green-escape": (state.challenges.repeatableCompletions["green-escape"] || 0) + 1,
+  };
+
+  const nextChallenges: ChallengesState = {
+    ...state.challenges,
+    completedGreenEscapes: [record, ...state.challenges.completedGreenEscapes],
+    completedChallengeIds: completed,
+    repeatableCompletions,
+    earnedBadgeIds: badges,
+    points: state.challenges.points + pointsEarned,
+    lastAwardedAt: {
+      ...state.challenges.lastAwardedAt,
+      "green-escape": now,
+    },
+  };
+
+  return {
+    state: touch(state, now, { challenges: nextChallenges }),
+    error: null,
+    pointsEarned,
+    badgeEarned,
+  };
+}
+
+export function recordChaiSession(
+  state: EscapeState,
+  params: { friendId?: string; planId?: string },
+  now = Date.now(),
+): { state: EscapeState; error: string | null; pointsEarned?: number; badgeEarned?: string } {
+  if (params.friendId && !friendById.has(params.friendId)) {
+    return { state, error: "Friend not found." };
+  }
+  const lastClaimed = state.challenges.lastAwardedAt["chai-committee"] || 0;
+  if (now - lastClaimed < 1500) {
+    return { state, error: "Reward recently claimed." };
+  }
+
+  const record: CompletedChaiRecord = {
+    id: `chai-${params.friendId ?? "plan"}-${now}`,
+    friendId: params.friendId,
+    planId: params.planId,
+    completedAt: now,
+  };
+
+  const pointsEarned = 90;
+  const badges = [...state.challenges.earnedBadgeIds];
+  let badgeEarned: string | undefined;
+  if (!badges.includes("badge-chai-connoisseur")) {
+    badges.push("badge-chai-connoisseur");
+    badgeEarned = "badge-chai-connoisseur";
+  }
+
+  const completed = state.challenges.completedChallengeIds.includes("chai-committee")
+    ? state.challenges.completedChallengeIds
+    : [...state.challenges.completedChallengeIds, "chai-committee"];
+
+  const nextChallenges: ChallengesState = {
+    ...state.challenges,
+    completedChaiSessions: [record, ...state.challenges.completedChaiSessions],
+    completedChallengeIds: completed,
+    earnedBadgeIds: badges,
+    points: state.challenges.points + pointsEarned,
+    lastAwardedAt: {
+      ...state.challenges.lastAwardedAt,
+      "chai-committee": now,
+    },
+  };
+
+  return {
+    state: touch(state, now, { challenges: nextChallenges }),
+    error: null,
+    pointsEarned,
+    badgeEarned,
+  };
+}
+
+export function checkCuriousWanderer(
+  state: EscapeState,
+  now = Date.now(),
+): { state: EscapeState; pointsEarned?: number; badgeEarned?: string } {
+  if (state.savedIds.length >= 3 && !state.challenges.completedChallengeIds.includes("curious-wanderer")) {
+    const pointsEarned = 100;
+    const badges = [...state.challenges.earnedBadgeIds];
+    let badgeEarned: string | undefined;
+    if (!badges.includes("badge-pocket-curator")) {
+      badges.push("badge-pocket-curator");
+      badgeEarned = "badge-pocket-curator";
+    }
+
+    const nextChallenges: ChallengesState = {
+      ...state.challenges,
+      completedChallengeIds: [...state.challenges.completedChallengeIds, "curious-wanderer"],
+      earnedBadgeIds: badges,
+      points: state.challenges.points + pointsEarned,
+      lastAwardedAt: {
+        ...state.challenges.lastAwardedAt,
+        "curious-wanderer": now,
+      },
+    };
+
+    return {
+      state: touch(state, now, { challenges: nextChallenges }),
+      pointsEarned,
+      badgeEarned,
+    };
+  }
+  return { state };
+}
+
+export type ChallengeProgress = {
+  current: number;
+  target: number;
+  percentage: number;
+  isCompleted: boolean;
+  isReadyToClaim: boolean;
+  label: string;
+  timerRemainingSeconds?: number;
+};
+
+export function getChallengeProgress(
+  state: EscapeState,
+  challengeId: string,
+  now = Date.now(),
+): ChallengeProgress {
+  const isCompleted = state.challenges.completedChallengeIds.includes(challengeId);
+
+  switch (challengeId) {
+    case "campus-explorer": {
+      const current = Math.min(state.challenges.discoveredPlaceIds.length, 3);
+      return {
+        current,
+        target: 3,
+        percentage: Math.round((current / 3) * 100),
+        isCompleted,
+        isReadyToClaim: current >= 3 && !isCompleted,
+        label: `${current}/3 spots discovered`,
+      };
+    }
+    case "digital-detox": {
+      const timer = state.challenges.activeDetoxTimer;
+      if (timer) {
+        const finishesAt = timer.startedAt + timer.durationSeconds * 1000;
+        const remainingSeconds = Math.max(0, Math.ceil((finishesAt - now) / 1000));
+        const elapsedSeconds = timer.durationSeconds - remainingSeconds;
+        const current = Math.floor(elapsedSeconds / 60);
+        const percentage = Math.min(100, Math.round((elapsedSeconds / timer.durationSeconds) * 100));
+        const isReadyToClaim = remainingSeconds <= 0;
+        return {
+          current,
+          target: 15,
+          percentage,
+          isCompleted: false,
+          isReadyToClaim,
+          timerRemainingSeconds: remainingSeconds,
+          label: isReadyToClaim
+            ? "15/15 min · Ready to claim!"
+            : `${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, "0")} remaining`,
+        };
+      }
+      const count = state.challenges.completedDetoxSessions.length;
+      return {
+        current: isCompleted ? 15 : 0,
+        target: 15,
+        percentage: isCompleted ? 100 : 0,
+        isCompleted,
+        isReadyToClaim: false,
+        label: isCompleted
+          ? `${count} break${count === 1 ? "" : "s"} completed`
+          : "0/15 min timer",
+      };
+    }
+    case "study-buddy": {
+      const current = Math.min(state.challenges.completedStudySessions.length, 1);
+      return {
+        current,
+        target: 1,
+        percentage: current >= 1 ? 100 : 0,
+        isCompleted,
+        isReadyToClaim: current >= 1 && !isCompleted,
+        label: `${current}/1 study session`,
+      };
+    }
+    case "green-escape": {
+      const current = Math.min(state.challenges.completedGreenEscapes.length, 1);
+      return {
+        current,
+        target: 1,
+        percentage: current >= 1 ? 100 : 0,
+        isCompleted,
+        isReadyToClaim: current >= 1 && !isCompleted,
+        label: `${current}/1 green space visited`,
+      };
+    }
+    case "chai-committee": {
+      const current = Math.min(state.challenges.completedChaiSessions.length, 1);
+      return {
+        current,
+        target: 1,
+        percentage: current >= 1 ? 100 : 0,
+        isCompleted,
+        isReadyToClaim: current >= 1 && !isCompleted,
+        label: `${current}/1 chai/snack break`,
+      };
+    }
+    case "curious-wanderer": {
+      const current = Math.min(state.savedIds.length, 3);
+      return {
+        current,
+        target: 3,
+        percentage: Math.round((current / 3) * 100),
+        isCompleted,
+        isReadyToClaim: current >= 3 && !isCompleted,
+        label: `${current}/3 saved items`,
+      };
+    }
+    default:
+      return {
+        current: isCompleted ? 1 : 0,
+        target: 1,
+        percentage: isCompleted ? 100 : 0,
+        isCompleted,
+        isReadyToClaim: false,
+        label: isCompleted ? "Completed" : "Not started",
+      };
+  }
+}
+
+export type ChallengesSummary = {
+  totalPoints: number;
+  completedCount: number;
+  totalChallenges: number;
+  earnedBadgesCount: number;
+  totalBadges: number;
+  activeTimerRemainingSeconds?: number;
+};
+
+export function getChallengesSummary(state: EscapeState, now = Date.now()): ChallengesSummary {
+  const timer = state.challenges.activeDetoxTimer;
+  let activeTimerRemainingSeconds: number | undefined;
+  if (timer) {
+    const finishesAt = timer.startedAt + timer.durationSeconds * 1000;
+    activeTimerRemainingSeconds = Math.max(0, Math.ceil((finishesAt - now) / 1000));
+  }
+  return {
+    totalPoints: state.challenges.points,
+    completedCount: state.challenges.completedChallengeIds.length,
+    totalChallenges: challengesList.length,
+    earnedBadgesCount: state.challenges.earnedBadgeIds.length,
+    totalBadges: badgesCatalog.length,
+    activeTimerRemainingSeconds,
   };
 }

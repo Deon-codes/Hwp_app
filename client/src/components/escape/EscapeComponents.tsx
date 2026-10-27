@@ -24,6 +24,7 @@ import {
   Sparkles,
   Star,
   Sun,
+  Trophy,
   UserPlus,
   Users,
   Wallet,
@@ -36,6 +37,7 @@ import {
   formatPrice,
   getBudgetLabel,
   moods,
+  placeById,
 } from "@/lib/escape-data";
 import { ALLOWED_BUDGETS, ALLOWED_DURATIONS, describePlanStatus, formatRemaining, getPlanTiming, nextPlanSlot, type Plan, type PlanDraft, type PlanDraftErrors } from "@/lib/escape-logic";
 import { useEscape, type DetailItem, type PlannerState, type View } from "@/lib/escape-state";
@@ -93,10 +95,11 @@ export function Avatar({ initials, tone = "lavender", size = "normal" }: { initi
 }
 
 export function Header() {
-  const { view, setView, profile } = useEscape();
+  const { view, setView, profile, challengesSummary } = useEscape();
   const nav: Array<{ id: View; label: string; icon: typeof Compass }> = [
     { id: "discover", label: "Discover", icon: Sparkles },
     { id: "find", label: "Break Finder", icon: Compass },
+    { id: "challenges", label: "Challenges", icon: Trophy },
     { id: "saved", label: "Saved", icon: Bookmark },
     { id: "profile", label: "Profile", icon: Users },
   ];
@@ -105,7 +108,14 @@ export function Header() {
       <button className="brand-button" onClick={() => setView("discover")} aria-label="Go to Discover"><Mark /></button>
       <nav className="desktop-nav" aria-label="Primary navigation">
         {nav.map(({ id, label }) => (
-          <button key={id} className={`nav-link ${view === id ? "is-active" : ""}`} onClick={() => setView(id)} aria-current={view === id ? "page" : undefined}>{label}</button>
+          <button key={id} className={`nav-link ${view === id ? "is-active" : ""}`} onClick={() => setView(id)} aria-current={view === id ? "page" : undefined}>
+            {label}
+            {id === "challenges" && challengesSummary.totalPoints > 0 && (
+              <span className="nav-points-badge" aria-label={`${challengesSummary.totalPoints} points`}>
+                {challengesSummary.totalPoints}
+              </span>
+            )}
+          </button>
         ))}
       </nav>
       <button className="header-avatar" onClick={() => setView("profile")} aria-label="Open your profile">
@@ -120,6 +130,7 @@ export function BottomNav() {
   const nav: Array<{ id: View; label: string; icon: typeof Compass }> = [
     { id: "discover", label: "Discover", icon: Sparkles },
     { id: "find", label: "Find", icon: Compass },
+    { id: "challenges", label: "Challenges", icon: Trophy },
     { id: "saved", label: "Saved", icon: Bookmark },
     { id: "profile", label: "Profile", icon: Users },
   ];
@@ -188,7 +199,24 @@ export function PlaceCard({ item, index = 0 }: { item: Place; index?: number }) 
 }
 
 export function MiniMap() {
-  return <div className="mini-map" aria-label="Illustrative campus map, not live navigation" role="img"><div className="map-river" /><div className="map-path path-one" /><div className="map-path path-two" /><div className="map-building building-one" /><div className="map-building building-two" /><div className="map-building building-three" /><div className="map-tree tree-one" /><div className="map-tree tree-two" /><div className="map-note"><MapPin size={14} /> illustrative campus map</div><span className="map-campus-label">campus<br /><strong>commons</strong></span><span className="map-pin pin-chai"><MapPin size={17} fill="currentColor" /></span><span className="map-pin pin-garden"><MapPin size={17} fill="currentColor" /></span><span className="map-pin pin-library"><MapPin size={17} fill="currentColor" /></span></div>;
+  const { openDetails } = useEscape();
+  return (
+    <div className="mini-map" aria-label="Illustrative campus map, not live navigation" role="img">
+      <div className="map-river" />
+      <div className="map-path path-one" />
+      <div className="map-path path-two" />
+      <div className="map-building building-one" />
+      <div className="map-building building-two" />
+      <div className="map-building building-three" />
+      <div className="map-tree tree-one" />
+      <div className="map-tree tree-two" />
+      <div className="map-note"><MapPin size={14} /> illustrative campus map</div>
+      <span className="map-campus-label">campus<br /><strong>commons</strong></span>
+      <button type="button" className="map-pin pin-chai" onClick={() => { const p = placeById.get("place-chai-stall"); if (p) openDetails(p); }} aria-label="View Chai stall"><MapPin size={17} fill="currentColor" /></button>
+      <button type="button" className="map-pin pin-garden" onClick={() => { const p = placeById.get("place-garden"); if (p) openDetails(p); }} aria-label="View Garden courtyard"><MapPin size={17} fill="currentColor" /></button>
+      <button type="button" className="map-pin pin-library" onClick={() => { const p = placeById.get("place-library"); if (p) openDetails(p); }} aria-label="View Library recharge corner"><MapPin size={17} fill="currentColor" /></button>
+    </div>
+  );
 }
 
 export function FriendCard({ friend }: { friend: Friend }) {
