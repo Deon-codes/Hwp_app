@@ -70,6 +70,7 @@ export type Connection = {
 export type PlanInviteStatus = "pending" | "accepted" | "declined";
 export type PlanMyStatus = "pending" | "accepted" | "declined";
 export type PlanTimingStatus = "upcoming" | "past" | "cancelled";
+export type PlanTab = "upcoming" | "invites" | "history";
 
 export type PlanInvitee = {
   friendId: string;
@@ -225,9 +226,10 @@ export function nextPlanSlot(now: number): { date: string; startTime: string } {
   date.setSeconds(0, 0);
   const minutes = Math.ceil(date.getMinutes() / 15) * 15;
   date.setMinutes(minutes);
-  if (date.getHours() >= 23 && date.getMinutes() > 45) {
-    date.setDate(date.getDate() + 1);
-    date.setHours(10, 0, 0, 0);
+  if (date.getHours() < 7) {
+    if (date.getHours() === 0 && date.getMinutes() < 15) {
+      date.setHours(10, 0, 0, 0);
+    }
   }
   return { date: toDateKey(date), startTime: toTimeKey(date) };
 }
@@ -1218,6 +1220,7 @@ export function updateProfileFields(
   now = Date.now(),
 ): StateResult {
   const nextProfile = { ...state.profile, ...patch };
+  if (typeof nextProfile.name === "string") nextProfile.name = nextProfile.name.trim();
   const errors = validateProfile(nextProfile);
   if (Object.keys(errors).length > 0) {
     return { state, error: Object.values(errors)[0] ?? "That profile change isn't valid." };

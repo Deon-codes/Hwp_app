@@ -15,7 +15,6 @@ import {
   Heart,
   Info,
   MapPin,
-  Menu,
   Navigation,
   PartyPopper,
   Pencil,
@@ -30,7 +29,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import type { Activity, FinderTab, Friend, IllustrationTone, Mood, Place } from "@/lib/escape-data";
+import type { Activity, Friend, IllustrationTone, Mood, Place } from "@/lib/escape-data";
 import {
   formatDuration,
   formatPlanDate,
@@ -94,7 +93,7 @@ export function Avatar({ initials, tone = "lavender", size = "normal" }: { initi
 }
 
 export function Header() {
-  const { view, setView, profile, pendingInviteCount } = useEscape();
+  const { view, setView, profile } = useEscape();
   const nav: Array<{ id: View; label: string; icon: typeof Compass }> = [
     { id: "discover", label: "Discover", icon: Sparkles },
     { id: "find", label: "Break Finder", icon: Compass },
@@ -106,22 +105,18 @@ export function Header() {
       <button className="brand-button" onClick={() => setView("discover")} aria-label="Go to Discover"><Mark /></button>
       <nav className="desktop-nav" aria-label="Primary navigation">
         {nav.map(({ id, label }) => (
-          <button key={id} className={`nav-link ${view === id ? "is-active" : ""}`} onClick={() => setView(id)} aria-current={view === id ? "page" : undefined}>
-            {label}
-            {id === "find" && pendingInviteCount > 0 && <span className="nav-count" aria-label={`${pendingInviteCount} pending plans`}>{pendingInviteCount}</span>}
-          </button>
+          <button key={id} className={`nav-link ${view === id ? "is-active" : ""}`} onClick={() => setView(id)} aria-current={view === id ? "page" : undefined}>{label}</button>
         ))}
       </nav>
       <button className="header-avatar" onClick={() => setView("profile")} aria-label="Open your profile">
         <Avatar initials={profile.avatar} tone="lavender" size="small" /><span>{profile.name}</span><ChevronDown size={15} />
       </button>
-      <button className="mobile-menu-button" aria-label="Navigation is available below"><Menu size={22} /></button>
     </header>
   );
 }
 
 export function BottomNav() {
-  const { view, setView, pendingInviteCount } = useEscape();
+  const { view, setView } = useEscape();
   const nav: Array<{ id: View; label: string; icon: typeof Compass }> = [
     { id: "discover", label: "Discover", icon: Sparkles },
     { id: "find", label: "Find", icon: Compass },
@@ -134,7 +129,6 @@ export function BottomNav() {
         <button key={id} className={`bottom-nav-item ${view === id ? "is-active" : ""}`} onClick={() => setView(id)} aria-current={view === id ? "page" : undefined}>
           <Icon size={20} strokeWidth={view === id ? 2.8 : 2} />
           <span>{label}</span>
-          {id === "find" && pendingInviteCount > 0 && <span className="bottom-nav-count">{pendingInviteCount}</span>}
         </button>
       ))}
     </nav>
@@ -383,13 +377,12 @@ function PlanCard({ plan }: { plan: Plan }) {
 }
 
 export function PlansSheet() {
-  const { plansOpen, closePlans, planBuckets, pendingInviteCount } = useEscape();
-  const [tab, setTab] = useState<"upcoming" | "invites" | "history">("upcoming");
+  const { plansOpen, closePlans, planBuckets, pendingInviteCount, plansTab: tab, setPlansTab: setTab } = useEscape();
   if (!plansOpen) return null;
   const list = tab === "upcoming" ? planBuckets.upcoming : tab === "invites" ? planBuckets.invites : planBuckets.history;
-  const empty = tab === "upcoming" ? "no upcoming plans yet — your next break could live here." : tab === "invites" ? "no invitations waiting. quiet calendar, clear head." : "past and cancelled plans will gather here.";
+  const empty = tab === "upcoming" ? "no upcoming plans yet — your next break could live here." : tab === "invites" ? "no invitations waiting. quiet calendar, clear head." : "past, cancelled, and declined plans gather here.";
   return <div className="sheet-backdrop" onClick={closePlans}><aside className="plans-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="plans-title"><button className="sheet-close" onClick={closePlans} aria-label="Close plans"><X size={21} /></button><div className="eyebrow"><span className="eyebrow-dot" />your little calendar</div><h2 id="plans-title">plans & invitations.</h2><p className="sheet-description">Everything you've planned, been invited to, or quietly cancelled. Demo classmates reply automatically here.</p>
-    <div className="plan-tabs" role="tablist" aria-label="Plan lists"><button role="tab" aria-selected={tab === "upcoming"} className={tab === "upcoming" ? "is-active" : ""} onClick={() => setTab("upcoming")}>Upcoming<span>{planBuckets.upcoming.length}</span></button><button role="tab" aria-selected={tab === "invites"} className={tab === "invites" ? "is-active" : ""} onClick={() => setTab("invites")}>Invites<span>{planBuckets.invites.length}</span></button><button role="tab" aria-selected={tab === "history"} className={tab === "history" ? "is-active" : ""} onClick={() => setTab("history")}>Past & cancelled<span>{planBuckets.history.length}</span></button></div>
+    <div className="plan-tabs" role="tablist" aria-label="Plan lists"><button role="tab" aria-selected={tab === "upcoming"} className={tab === "upcoming" ? "is-active" : ""} onClick={() => setTab("upcoming")}>Upcoming<span>{planBuckets.upcoming.length}</span></button><button role="tab" aria-selected={tab === "invites"} className={tab === "invites" ? "is-active" : ""} onClick={() => setTab("invites")}>Invites<span>{planBuckets.invites.length}</span></button><button role="tab" aria-selected={tab === "history"} className={tab === "history" ? "is-active" : ""} onClick={() => setTab("history")}>History<span>{planBuckets.history.length}</span></button></div>
     <div className="plan-list">{list.length ? list.map((plan) => <PlanCard key={plan.id} plan={plan} />) : <div className="plans-empty"><CalendarDays size={27} /><p>{empty}</p>{tab === "invites" && pendingInviteCount === 0 && <small>New invitations will show up here.</small>}</div>}</div>
   </aside></div>;
 }

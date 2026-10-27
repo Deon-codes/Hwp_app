@@ -472,3 +472,14 @@ flex: 1; max-width: 460px; }
   .profile-stats { flex-wrap: wrap; gap: 10px; }
   .not-found-page { padding: 45px 17px 90px; }
 }
+
+/* Keep the plan form inside the sheet at narrow widths; native date/time
+   inputs otherwise contribute a wide intrinsic minimum. */
+.plan-form, .plan-form > *, .plan-form-row > *, .form-field, .segmented-group, .plan-friends { min-width: 0; }
+.form-field input, .form-field textarea { min-width: 0; max-width: 100%; }
+.plan-friend-options { max-width: 100%; }
+.plan-sheet { overflow-x: hidden; }
+.segmented-options { min-width: 0; }
+
+.dashboard-demo-note { display: flex; align-items: flex-start; gap: 5px; margin-top: 10px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.dashboard-demo-note svg { flex: none; margin-top: 1px; }

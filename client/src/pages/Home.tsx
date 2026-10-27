@@ -6,7 +6,7 @@ import {
   ChevronDown,
   Clock3,
   Filter,
-  MapPin,
+  Info,
   SlidersHorizontal,
   Sparkles,
   Users,
@@ -24,7 +24,7 @@ import {
   TinyDoodle,
 } from "@/components/escape/EscapeComponents";
 import { activityCategories, formatPlanDate, getBudgetLabel, moods } from "@/lib/escape-data";
-import { recommendActivities, recommendPlaces, type CatalogSort } from "@/lib/escape-logic";
+import { recommendActivities, recommendPlaces } from "@/lib/escape-logic";
 import { useEscape } from "@/lib/escape-state";
 
 const walkOptions: Array<{ value: number | "all"; label: string }> = [
@@ -92,13 +92,14 @@ export default function Home() {
     </section>
 
     <section className="dashboard-section section-block" aria-labelledby="dashboard-title">
-      <div className="section-heading dashboard-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />today, at a glance</div><h2 id="dashboard-title">your little dashboard.</h2><p>Your break, your budget, your people, your next plan — all in one place.</p></div>{pendingInviteCount > 0 ? <button className="invite-banner" onClick={openPlans}><CalendarDays size={16} />{pendingInviteCount} invitation{pendingInviteCount === 1 ? "" : "s"} waiting <ArrowRight size={15} /></button> : <button className="dashboard-plans-link" onClick={openPlans}>your plans <ArrowRight size={15} /></button>}</div>
+      <div className="section-heading dashboard-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />today, at a glance</div><h2 id="dashboard-title">your little dashboard.</h2><p>Your break, your budget, your people, your next plan — all in one place.</p></div>{pendingInviteCount > 0 ? <button className="invite-banner" onClick={() => openPlans("invites")}><CalendarDays size={16} />{pendingInviteCount} invitation{pendingInviteCount === 1 ? "" : "s"} waiting <ArrowRight size={15} /></button> : <button className="dashboard-plans-link" onClick={() => openPlans("upcoming")}>your plans <ArrowRight size={15} /></button>}</div>
       <div className="dashboard-grid">
         <button className="dashboard-card dash-time" onClick={jumpToPreferences} aria-label="Change your available break time"><span className="dashboard-card-icon"><Clock3 size={18} /></span><span className="dashboard-card-copy"><small>break time</small><strong>{prefs.duration} min</strong><span>{availability.expired ? "visibility expired — reset it" : availability.label}</span></span><ArrowRight size={16} /></button>
         <button className="dashboard-card dash-budget" onClick={jumpToPreferences} aria-label="Change your budget"><span className="dashboard-card-icon"><Wallet size={18} /></span><span className="dashboard-card-copy"><small>spend ceiling</small><strong>{getBudgetLabel(prefs.budget)}</strong><span>{prefs.company === "either" ? "solo or with friends" : `usually ${prefs.company}`}</span></span><ArrowRight size={16} /></button>
         <button className="dashboard-card dash-friends" onClick={openPeople} aria-label="See friends who are available"><span className="dashboard-card-icon"><Users size={18} /></span><span className="dashboard-card-copy"><small>friends free</small><strong>{availableFriends.length} around</strong><span>{availableFriends.length ? availableFriends.slice(0, 3).map((friend) => friend.name).join(", ") : "nobody sharing right now"}</span></span><span className="dashboard-avatars">{availableFriends.slice(0, 3).map((friend) => <Avatar key={friend.id} initials={friend.initials} tone={friend.tone} size="small" />)}</span><ArrowRight size={16} /></button>
-        <button className="dashboard-card dash-plan" onClick={openPlans} aria-label="Open your plans"><span className="dashboard-card-icon"><CalendarDays size={18} /></span><span className="dashboard-card-copy"><small>next plan</small><strong>{nextPlan ? nextPlan.itemName : "no plans yet"}</strong><span>{nextPlan ? `${nextPlanLabel} · ${nextPlan.startTime}` : "start a little something"}</span></span><ArrowRight size={16} /></button>
+        <button className="dashboard-card dash-plan" onClick={() => openPlans("upcoming")} aria-label="Open your plans"><span className="dashboard-card-icon"><CalendarDays size={18} /></span><span className="dashboard-card-copy"><small>next plan</small><strong>{nextPlan ? nextPlan.itemName : "no plans yet"}</strong><span>{nextPlan ? `${nextPlanLabel} · ${nextPlan.startTime}` : "start a little something"}</span></span><ArrowRight size={16} /></button>
       </div>
+      <p className="dashboard-demo-note"><Info size={13} /> Availability, classmates, prices, and walk times here are simulated demo data stored in this browser.</p>
     </section>
 
     <section className="mood-section section-block" aria-labelledby="mood-title"><div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />start with a feeling</div><h2 id="mood-title">okay, what’s the vibe?</h2><p>Pick the feeling you want a little more of. We’ll do the sorting.</p></div><div className="selected-vibe"><span>your vibe</span><strong>{prefs.mood}</strong><Sparkles size={17} /></div></div><div className="mood-grid">{moods.map((mood) => <MoodCard key={mood.name} {...mood} selected={prefs.mood === mood.name} onClick={() => setMood(mood.name)} />)}</div></section>

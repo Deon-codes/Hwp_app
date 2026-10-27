@@ -112,7 +112,7 @@ export default function Find() {
 
       <section className="people-section" aria-labelledby="directory-title">
         <div className="people-section-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />campus directory</div><h3 id="directory-title">find your people.</h3></div><span className="people-count">{friends.length} demo classmates</span></div>
-        <div className="directory-toolbar"><SearchField label="Search demo classmates" value={peopleQuery} onChange={setPeopleQuery} placeholder="search by name or interest…" /><button className="filter-reset" onClick={() => { setPeopleQuery(""); setFinderTab("people"); }}>clear</button></div>
+        <div className="directory-toolbar"><SearchField label="Search demo classmates" value={peopleQuery} onChange={setPeopleQuery} placeholder="search by name or interest…" /><button className="filter-reset" onClick={() => setPeopleQuery("")}>clear</button></div>
         <div className="directory-grid">{filteredPeople.length ? filteredPeople.map((friend) => <DirectoryCard key={friend.id} friend={friend} />) : <div className="people-empty"><Search size={22} /><p>No demo classmate matches “{peopleQuery}”. Try another name or interest.</p></div>}</div>
         <p className="directory-note"><Info size={14} /> Friend requests, availability, and shared details stay in this browser. Only accepted friends can see availability, and nobody can see a precise location.</p>
       </section>

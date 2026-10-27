@@ -9,7 +9,6 @@ import {
   Flower2,
   Gamepad2,
   Headphones,
-  MapPin,
   Sparkles,
   Sun,
   Users,
@@ -415,7 +414,7 @@ export const demoFriends: DemoFriend[] = [
     defaultStatus: "free for chai",
     defaultMood: "Social",
     defaultAvailable: true,
-    defaultWindowMin: 60,
+    defaultWindowMin: null,
     interests: ["Social", "Hungry"],
     bio: "Chai loyalist. Will always pick the table near the window.",
     seedRelationship: "friends",
@@ -428,7 +427,7 @@ export const demoFriends: DemoFriend[] = [
     defaultStatus: "up for a walk",
     defaultMood: "Explore",
     defaultAvailable: true,
-    defaultWindowMin: 45,
+    defaultWindowMin: null,
     interests: ["Explore", "Chill"],
     bio: "Takes the long route on purpose. Knows where the good shade is.",
     seedRelationship: "friends",
@@ -555,4 +554,3 @@ export const smallMapPins = [
   { label: "sports", left: "35%", top: "73%", tone: "yellow" as IllustrationTone },
 ];
 
-export { MapPin };

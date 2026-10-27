@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Edit3, Eye, EyeOff, Heart, Info, Sparkles, UserRound } from "lucide-react";
-import { AvailabilityControl, Avatar, Button, PageIntro, Segmented } from "@/components/escape/EscapeComponents";
+import { AvailabilityControl, Avatar, PageIntro, Segmented } from "@/components/escape/EscapeComponents";
 import { getBudgetLabel, moods, type Budget, type BreakDuration, type Company, type IllustrationTone, type Mood } from "@/lib/escape-data";
 import { useEscape } from "@/lib/escape-state";
 

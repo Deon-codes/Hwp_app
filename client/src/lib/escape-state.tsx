@@ -17,7 +17,6 @@ import {
   getAvailabilityView,
   getAcceptedFriends,
   getAvailableFriends,
-  getFriendRequestCounts,
   getFriendViews,
   getNextPlan,
   getPlanBuckets,
@@ -40,20 +39,14 @@ import {
   type Plan,
   type PlanBuckets,
   type PlanDraft,
+  type PlanTab,
   type PlanDraftErrors,
   type PlanResult,
-  type ProfileErrors,
   type ProfileState,
   type SortMode,
   type View,
 } from "./escape-logic";
-import {
-  loadEscapeState,
-  saveEscapeState,
-  STORAGE_KEY,
-  type StorageLike,
-  type StorageWarning,
-} from "./escape-storage";
+import { loadEscapeState, saveEscapeState, STORAGE_KEY, type StorageLike } from "./escape-storage";
 
 export type { AvailabilityView, DetailItem, Plan, PlanBuckets, PlanDraft, ProfileState, View } from "./escape-logic";
 export type RouteView = View | "notfound";
@@ -82,7 +75,6 @@ type EscapeContextValue = {
   isSaved: (id: string) => boolean;
   toggleSaved: (id: string) => void;
   profile: ProfileState;
-  profileErrors: ProfileErrors;
   updateProfile: (patch: Partial<ProfileState>) => boolean;
   availability: AvailabilityView;
   setAvailability: (availability: ProfileState["availability"]) => void;
@@ -94,7 +86,6 @@ type EscapeContextValue = {
   acceptedFriends: Friend[];
   incomingRequests: Friend[];
   outgoingRequests: Friend[];
-  friendRequestCounts: { incoming: number; outgoing: number };
   sendFriendRequest: (friendId: string) => void;
   acceptFriendRequest: (friendId: string) => void;
   rejectFriendRequest: (friendId: string) => void;
@@ -118,7 +109,9 @@ type EscapeContextValue = {
   openPlanEditor: (plan: Plan) => void;
   closePlanner: () => void;
   plansOpen: boolean;
-  openPlans: () => void;
+  plansTab: PlanTab;
+  setPlansTab: (tab: PlanTab) => void;
+  openPlans: (tab?: PlanTab) => void;
   closePlans: () => void;
   toast: Toast | null;
   showToast: (message: string, tone?: Toast["tone"]) => void;
@@ -127,7 +120,6 @@ type EscapeContextValue = {
   jumpToPreferences: () => void;
   openPeople: () => void;
   openSpots: () => void;
-  storageWarning: StorageWarning;
 };
 
 const EscapeContext = createContext<EscapeContextValue | null>(null);
@@ -171,7 +163,16 @@ function defaultActivityFor(friend: Friend): Activity {
 export function EscapeProvider({ children }: { children: React.ReactNode }) {
   const storage = useMemo(getStorage, []);
   const initial = useMemo(() => loadEscapeState(storage, Date.now()), [storage]);
-  const [state, setState] = useState<EscapeState>(initial.state);
+  const [state, setStateRaw] = useState<EscapeState>(initial.state);
+  // State also lives in a ref so two actions fired in the same tick (for
+  // example toggling two profile switches quickly) build on each other instead
+  // of both reading a stale render snapshot and dropping one another.
+  const stateRef = useRef(state);
+  const setState = useCallback((next: EscapeState | ((current: EscapeState) => EscapeState)) => {
+    const value = typeof next === "function" ? next(stateRef.current) : next;
+    stateRef.current = value;
+    setStateRaw(value);
+  }, []);
   const [clock, setClock] = useState(() => Date.now());
   const [view, setViewState] = useState<RouteView>(() =>
     typeof window === "undefined" ? "discover" : routeFromPath(window.location.pathname),
@@ -179,9 +180,10 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
   const [detailItem, setDetailItem] = useState<Activity | Place | null>(null);
   const [planner, setPlanner] = useState<PlannerState | null>(null);
   const [plansOpen, setPlansOpen] = useState(false);
+  const [plansTab, setPlansTab] = useState<PlanTab>("upcoming");
   const [toast, setToast] = useState<Toast | null>(null);
-  const [profileErrors, setProfileErrors] = useState<ProfileErrors>({});
   const saveFailureShown = useRef(false);
+  const skipNextStorageWrite = useRef(false);
   const lastPlanSignature = useRef<{ signature: string; at: number } | null>(null);
   const initialMessageShown = useRef(false);
 
@@ -210,8 +212,13 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
     document.title = titleForView(view);
   }, [view]);
 
-  // Persist every meaningful state change.
+  // Persist every meaningful state change. Writes that merely mirror another
+  // tab's storage event are skipped, so two tabs cannot echo each other forever.
   useEffect(() => {
+    if (skipNextStorageWrite.current) {
+      skipNextStorageWrite.current = false;
+      return;
+    }
     const result = saveEscapeState(storage, state);
     if (!result.ok && !saveFailureShown.current) {
       saveFailureShown.current = true;
@@ -231,7 +238,10 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
       if (event.key !== STORAGE_KEY || !event.newValue) return;
       try {
         const parsed: unknown = JSON.parse(event.newValue);
-        setState(normalizeState(parsed, Date.now()));
+        const incoming = normalizeState(parsed, Date.now());
+        if (JSON.stringify(incoming) === JSON.stringify(stateRef.current)) return;
+        skipNextStorageWrite.current = true;
+        setState(incoming);
       } catch {
         // Ignore malformed writes from other tabs.
       }
@@ -277,7 +287,6 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
     () => friends.filter((friend) => friend.relationship === "outgoing"),
     [friends],
   );
-  const friendRequestCounts = useMemo(() => getFriendRequestCounts(state), [state]);
   const planBuckets = useMemo(() => getPlanBuckets(state, clock), [state, clock]);
   const nextPlan = useMemo(() => getNextPlan(state, clock), [state, clock]);
 
@@ -307,18 +316,17 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
       nextPatch.name = trimmed;
       nextPatch.avatar = initialsFromName(trimmed);
     }
-    const result = updateProfileFields(state, nextPatch, Date.now());
+    const result = updateProfileFields(stateRef.current, nextPatch, Date.now());
     if (result.error) {
       showToast(result.error, "error");
       return false;
     }
     setState(result.state);
-    setProfileErrors({});
     return true;
   };
 
   const setAvailability = (nextAvailability: ProfileState["availability"]) => {
-    const nextState = setAvailabilityLogic(state, nextAvailability, Date.now());
+    const nextState = setAvailabilityLogic(stateRef.current, nextAvailability, Date.now());
     setState(nextState);
     setClock(Date.now());
     const nextView = getAvailabilityView(nextState.profile, Date.now());
@@ -335,10 +343,11 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setAvailabilityWindow = (window: AvailabilityWindow) => {
-    setState(setAvailabilityWindowLogic(state, window, Date.now()));
+    const current = stateRef.current;
+    setState(setAvailabilityWindowLogic(current, window, Date.now()));
     setClock(Date.now());
     showToast(
-      window == null && state.profile.availability === "available"
+      window == null && current.profile.availability === "available"
         ? "your availability will stay on until you change it"
         : "availability window updated",
       "info",
@@ -346,24 +355,30 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleShareAvailability = () => {
-    updateProfile({ shareAvailability: !state.profile.shareAvailability });
+    updateProfile({ shareAvailability: !stateRef.current.profile.shareAvailability });
   };
 
   const toggleShareProfile = () => {
-    updateProfile({ shareProfile: !state.profile.shareProfile });
+    updateProfile({ shareProfile: !stateRef.current.profile.shareProfile });
   };
 
   const toggleSaved = (id: string) => {
-    const wasSaved = state.savedIds.includes(id);
-    setState((current) => ({
+    const current = stateRef.current;
+    const wasSaved = current.savedIds.includes(id);
+    setState({
       ...current,
       savedIds: toggleSavedId(current.savedIds, id),
       updatedAt: Date.now(),
-    }));
+    });
     showToast(wasSaved ? "removed from your little collection" : "saved for a later little escape");
   };
 
-  const runFriendAction = (result: { state: EscapeState; error: string | null }, success: string) => {
+  const runFriendAction = (
+    action: (current: EscapeState, friendId: string, now: number) => { state: EscapeState; error: string | null },
+    friendId: string,
+    success: string,
+  ) => {
+    const result = action(stateRef.current, friendId, Date.now());
     if (result.error) {
       showToast(result.error, "error");
       return;
@@ -373,19 +388,19 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const sendFriendRequest = (friendId: string) => {
-    runFriendAction(sendFriendRequestLogic(state, friendId, Date.now()), "friend request sent");
+    runFriendAction(sendFriendRequestLogic, friendId, "friend request sent");
   };
   const acceptFriendRequest = (friendId: string) => {
-    runFriendAction(acceptFriendRequestLogic(state, friendId, Date.now()), "you're connected — say hi when you're free");
+    runFriendAction(acceptFriendRequestLogic, friendId, "you're connected — say hi when you're free");
   };
   const rejectFriendRequest = (friendId: string) => {
-    runFriendAction(rejectFriendRequestLogic(state, friendId, Date.now()), "request declined");
+    runFriendAction(rejectFriendRequestLogic, friendId, "request declined");
   };
   const withdrawFriendRequest = (friendId: string) => {
-    runFriendAction(withdrawFriendRequestLogic(state, friendId, Date.now()), "request withdrawn");
+    runFriendAction(withdrawFriendRequestLogic, friendId, "request withdrawn");
   };
   const removeFriend = (friendId: string) => {
-    runFriendAction(removeFriendLogic(state, friendId, Date.now()), "removed from your people");
+    runFriendAction(removeFriendLogic, friendId, "removed from your people");
   };
 
   const inviteFriend = (friendId: string) => {
@@ -423,9 +438,9 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
       lastPlanSignature.current.signature === signature &&
       now - lastPlanSignature.current.at < 2500
     ) {
-      return { state, error: "That plan is already saved.", plan: null };
+      return { state: stateRef.current, error: "That plan is already saved.", plan: null };
     }
-    const result = createPlanLogic(state, draft, now);
+    const result = createPlanLogic(stateRef.current, draft, now);
     if (result.error) {
       showToast(result.error, "error");
       return result;
@@ -438,7 +453,7 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const savePlanEdits = (planId: string, draft: PlanDraft): PlanResult => {
-    const result = updatePlanLogic(state, planId, draft, Date.now());
+    const result = updatePlanLogic(stateRef.current, planId, draft, Date.now());
     if (result.error) {
       showToast(result.error, "error");
       return result;
@@ -450,7 +465,7 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const cancelPlan = (planId: string) => {
-    const result = cancelPlanLogic(state, planId, Date.now());
+    const result = cancelPlanLogic(stateRef.current, planId, Date.now());
     if (result.error) {
       showToast(result.error, "error");
       return;
@@ -460,7 +475,7 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const respondToPlan = (planId: string, response: "accepted" | "declined") => {
-    const result = respondToPlanLogic(state, planId, response, Date.now());
+    const result = respondToPlanLogic(stateRef.current, planId, response, Date.now());
     if (result.error) {
       showToast(result.error, "error");
       return;
@@ -517,7 +532,6 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
     isSaved: (id) => state.savedIds.includes(id),
     toggleSaved,
     profile: state.profile,
-    profileErrors,
     updateProfile,
     availability,
     setAvailability,
@@ -529,7 +543,6 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
     acceptedFriends,
     incomingRequests,
     outgoingRequests,
-    friendRequestCounts,
     sendFriendRequest,
     acceptFriendRequest,
     rejectFriendRequest,
@@ -553,7 +566,12 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
     openPlanEditor,
     closePlanner: () => setPlanner(null),
     plansOpen,
-    openPlans: () => setPlansOpen(true),
+    plansTab,
+    setPlansTab,
+    openPlans: (tab: PlanTab = "upcoming") => {
+      setPlansTab(tab);
+      setPlansOpen(true);
+    },
     closePlans: () => setPlansOpen(false),
     toast,
     showToast,
@@ -562,7 +580,6 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
     jumpToPreferences,
     openPeople,
     openSpots,
-    storageWarning: initial.warning,
   };
 
   return <EscapeContext.Provider value={contextValue}>{children}</EscapeContext.Provider>;
