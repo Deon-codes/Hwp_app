@@ -110,6 +110,30 @@ describe("state persistence", () => {
     expect(migrated.connections.some((connection) => connection.status === "outgoing" && connection.friendId === "friend-aisha")).toBe(false);
   });
 
+  it("preserves challenge progress, earned badges and points across save and load", () => {
+    const state: EscapeState = {
+      ...createDefaultState(NOW),
+      challenges: {
+        ...createDefaultState(NOW).challenges,
+        points: 250,
+        discoveredPlaceIds: ["place-garden", "place-canteen"],
+        completedChallengeIds: ["campus-explorer"],
+        earnedBadgeIds: ["badge-explorer-scout"],
+        activeDetoxTimer: { startedAt: NOW, durationSeconds: 900 },
+      },
+    };
+    const storage = new MemoryStorage();
+    saveEscapeState(storage, state);
+
+    const loaded = loadEscapeState(storage, NOW + 1000);
+    expect(loaded.warning).toBeNull();
+    expect(loaded.state.challenges.points).toBe(250);
+    expect(loaded.state.challenges.discoveredPlaceIds).toEqual(["place-garden", "place-canteen"]);
+    expect(loaded.state.challenges.completedChallengeIds).toEqual(["campus-explorer"]);
+    expect(loaded.state.challenges.earnedBadgeIds).toEqual(["badge-explorer-scout"]);
+    expect(loaded.state.challenges.activeDetoxTimer).toEqual({ startedAt: NOW, durationSeconds: 900 });
+  });
+
   it("reports unavailable storage but still returns a working in-memory state", () => {
     const loaded = loadEscapeState(null, NOW);
     expect(loaded.warning).toBe("unavailable");

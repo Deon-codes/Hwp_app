@@ -9,6 +9,7 @@ import {
   Info,
   SlidersHorizontal,
   Sparkles,
+  Trophy,
   Users,
   Wallet,
 } from "lucide-react";
@@ -48,6 +49,7 @@ export default function Home() {
     availableFriends,
     nextPlan,
     pendingInviteCount,
+    challengesSummary,
     openPlans,
     openPeople,
     openSpots,
@@ -92,7 +94,7 @@ export default function Home() {
     </section>
 
     <section className="dashboard-section section-block" aria-labelledby="dashboard-title">
-      <div className="section-heading dashboard-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />today, at a glance</div><h2 id="dashboard-title">your little dashboard.</h2><p>Your break, your budget, your people, your next plan — all in one place.</p></div>{pendingInviteCount > 0 ? <button className="invite-banner" onClick={() => openPlans("invites")}><CalendarDays size={16} />{pendingInviteCount} invitation{pendingInviteCount === 1 ? "" : "s"} waiting <ArrowRight size={15} /></button> : <button className="dashboard-plans-link" onClick={() => openPlans("upcoming")}>your plans <ArrowRight size={15} /></button>}</div>
+      <div className="section-heading dashboard-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />today, at a glance</div><h2 id="dashboard-title">your little dashboard.</h2><p>Your break, your budget, your people, your next plan — all in one place.</p></div><div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}><button className="dashboard-plans-link" onClick={() => setView("challenges")}><Trophy size={14} /> challenges ({challengesSummary.totalPoints} pts)</button>{pendingInviteCount > 0 ? <button className="invite-banner" onClick={() => openPlans("invites")}><CalendarDays size={16} />{pendingInviteCount} invitation{pendingInviteCount === 1 ? "" : "s"} waiting <ArrowRight size={15} /></button> : <button className="dashboard-plans-link" onClick={() => openPlans("upcoming")}>your plans <ArrowRight size={15} /></button>}</div></div>
       <div className="dashboard-grid">
         <button className="dashboard-card dash-time" onClick={jumpToPreferences} aria-label="Change your available break time"><span className="dashboard-card-icon"><Clock3 size={18} /></span><span className="dashboard-card-copy"><small>break time</small><strong>{prefs.duration} min</strong><span>{availability.expired ? "visibility expired — reset it" : availability.label}</span></span><ArrowRight size={16} /></button>
         <button className="dashboard-card dash-budget" onClick={jumpToPreferences} aria-label="Change your budget"><span className="dashboard-card-icon"><Wallet size={18} /></span><span className="dashboard-card-copy"><small>spend ceiling</small><strong>{getBudgetLabel(prefs.budget)}</strong><span>{prefs.company === "either" ? "solo or with friends" : `usually ${prefs.company}`}</span></span><ArrowRight size={16} /></button>

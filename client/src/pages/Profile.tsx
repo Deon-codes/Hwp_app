@@ -16,6 +16,7 @@ export default function Profile() {
     savedIds,
     friends,
     plans,
+    challengesSummary,
   } = useEscape();
   const [name, setName] = useState(profile.name);
   const [editingName, setEditingName] = useState(false);
@@ -57,7 +58,7 @@ export default function Profile() {
         <div className="profile-card-header"><div><div className="eyebrow"><span className="eyebrow-dot" />your profile</div><h2>hi, {profile.name.toLowerCase()}.</h2></div><Sparkles size={21} /></div>
         <div className="identity-main"><Avatar initials={profile.avatar} tone={profile.avatarTone} size="large" /><div className="identity-fields"><label htmlFor="display-name">display name</label><div className="editable-name">{editingName ? <input id="display-name" value={name} maxLength={40} onChange={(event) => { setName(event.target.value); setNameError(null); }} autoFocus /> : <strong>{profile.name}</strong>}{editingName ? <button onClick={saveName} aria-label="Save display name"><Check size={17} /></button> : <button onClick={() => { setName(profile.name); setEditingName(true); }} aria-label="Edit display name"><Edit3 size={16} /></button>}</div>{nameError ? <small className="form-error" role="alert">{nameError}</small> : <small>Shown to accepted friends inside this app.</small>}</div></div>
         <div className="profile-tone-row"><span className="field-label">avatar colour</span><div className="tone-options">{avatarTones.map((tone) => <button key={tone} className={`tone-option tone-${tone} ${profile.avatarTone === tone ? "is-selected" : ""}`} onClick={() => updateProfile({ avatarTone: tone })} aria-label={`Use ${tone} avatar`} aria-pressed={profile.avatarTone === tone}>{profile.avatarTone === tone && <Check size={13} />}</button>)}</div></div>
-        <div className="profile-stats"><span><strong>{savedIds.length}</strong> saved</span><span><strong>{friends.filter((friend) => friend.relationship === "friends").length}</strong> friends</span><span><strong>{plans.filter((plan) => plan.cancelledAt == null).length}</strong> plans</span></div>
+        <div className="profile-stats"><span><strong>{savedIds.length}</strong> saved</span><span><strong>{friends.filter((friend) => friend.relationship === "friends").length}</strong> friends</span><span><strong>{plans.filter((plan) => plan.cancelledAt == null).length}</strong> plans</span><span><strong>{challengesSummary.totalPoints}</strong> pts</span><span><strong>{challengesSummary.earnedBadgesCount}</strong> badges</span></div>
         <div className="profile-mini-note"><Info size={15} />Your profile lives in this browser only. There is no account, password, or server sync in this build.</div>
       </section>
 

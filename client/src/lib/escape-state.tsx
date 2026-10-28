@@ -12,28 +12,40 @@ import {
 } from "./escape-data";
 import {
   acceptFriendRequest as acceptFriendRequestLogic,
+  cancelDetoxTimer as cancelDetoxTimerLogic,
   cancelPlan as cancelPlanLogic,
+  checkCuriousWanderer as checkCuriousWandererLogic,
+  claimDetoxTimer as claimDetoxTimerLogic,
   createPlan as createPlanLogic,
   getAvailabilityView,
   getAcceptedFriends,
   getAvailableFriends,
+  getChallengeProgress as getChallengeProgressLogic,
+  getChallengesSummary as getChallengesSummaryLogic,
   getFriendViews,
   getNextPlan,
   getPlanBuckets,
   initialsFromName,
   normalizeState,
+  recordGreenEscape as recordGreenEscapeLogic,
+  recordPlaceDiscovery as recordPlaceDiscoveryLogic,
+  recordStudySession as recordStudySessionLogic,
   rejectFriendRequest as rejectFriendRequestLogic,
   removeFriend as removeFriendLogic,
   respondToPlan as respondToPlanLogic,
   sendFriendRequest as sendFriendRequestLogic,
   setAvailability as setAvailabilityLogic,
   setAvailabilityWindow as setAvailabilityWindowLogic,
+  startDetoxTimer as startDetoxTimerLogic,
   toggleSavedId,
   updatePlan as updatePlanLogic,
   updateProfileFields,
   validatePlanDraft,
   withdrawFriendRequest as withdrawFriendRequestLogic,
   type AvailabilityView,
+  type ChallengeProgress,
+  type ChallengesState,
+  type ChallengesSummary,
   type DiscoveryPreferences,
   type EscapeState,
   type Plan,
@@ -113,6 +125,15 @@ type EscapeContextValue = {
   setPlansTab: (tab: PlanTab) => void;
   openPlans: (tab?: PlanTab) => void;
   closePlans: () => void;
+  challenges: ChallengesState;
+  challengesSummary: ChallengesSummary;
+  recordPlaceDiscovery: (placeId: string) => void;
+  startDetoxTimer: (durationSeconds?: number) => void;
+  cancelDetoxTimer: () => void;
+  claimDetoxTimer: () => void;
+  recordStudySession: (params: { friendId?: string; planId?: string; note?: string }) => boolean;
+  recordGreenEscape: (itemId: string) => boolean;
+  getChallengeProgress: (challengeId: string) => ChallengeProgress;
   toast: Toast | null;
   showToast: (message: string, tone?: Toast["tone"]) => void;
   clearToast: () => void;
@@ -130,6 +151,7 @@ const routeFromPath = (path: string): RouteView => {
   if (normalized === "/find") return "find";
   if (normalized === "/saved") return "saved";
   if (normalized === "/profile") return "profile";
+  if (normalized === "/challenges") return "challenges";
   return "notfound";
 };
 
@@ -142,9 +164,11 @@ const titleForView = (view: RouteView) =>
       ? "Saved · ESCAPE"
       : view === "profile"
         ? "Profile · ESCAPE"
-        : view === "notfound"
-          ? "Not found · ESCAPE"
-          : "Discover · ESCAPE";
+        : view === "challenges"
+          ? "Challenges · ESCAPE"
+          : view === "notfound"
+            ? "Not found · ESCAPE"
+            : "Discover · ESCAPE";
 
 function getStorage(): StorageLike | null {
   if (typeof window === "undefined") return null;
@@ -250,12 +274,13 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // A lightweight clock keeps availability countdowns and plan statuses honest
-  // without polling or any server calls.
+  // A lightweight clock keeps availability countdowns, detox timers and plan statuses honest
+  // without polling or any server calls. Ticks every second when a detox timer is running.
   useEffect(() => {
-    const timer = window.setInterval(() => setClock(Date.now()), 30_000);
+    const intervalMs = state.challenges.activeDetoxTimer ? 1000 : 30_000;
+    const timer = window.setInterval(() => setClock(Date.now()), intervalMs);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [state.challenges.activeDetoxTimer]);
 
   useEffect(() => {
     if (!toast) return;
@@ -365,12 +390,24 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
   const toggleSaved = (id: string) => {
     const current = stateRef.current;
     const wasSaved = current.savedIds.includes(id);
-    setState({
+    const nextSavedIds = toggleSavedId(current.savedIds, id);
+    let nextState = {
       ...current,
-      savedIds: toggleSavedId(current.savedIds, id),
+      savedIds: nextSavedIds,
       updatedAt: Date.now(),
-    });
-    showToast(wasSaved ? "removed from your little collection" : "saved for a later little escape");
+    };
+    if (!wasSaved) {
+      const wanderer = checkCuriousWandererLogic(nextState, Date.now());
+      if (wanderer.pointsEarned) {
+        nextState = wanderer.state;
+        showToast("🌟 Challenge Completed: Curious Wanderer! (+100 pts & Pocket Curator badge)", "success");
+      } else {
+        showToast("saved for a later little escape");
+      }
+    } else {
+      showToast("removed from your little collection");
+    }
+    setState(nextState);
   };
 
   const runFriendAction = (
@@ -484,7 +521,88 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
     showToast(response === "accepted" ? "you're in — see you there" : "invitation declined", "info");
   };
 
-  const openDetails = (item: Activity | Place) => setDetailItem(item);
+  const openDetails = (item: Activity | Place) => {
+    setDetailItem(item);
+    // If it's a place, record unique place discovery for Campus Explorer
+    if (placeById.has(item.id)) {
+      const result = recordPlaceDiscoveryLogic(stateRef.current, item.id, Date.now());
+      if (result.isNewDiscovery) {
+        setState(result.state);
+        if (result.awarded && result.challengeCompleted === "campus-explorer") {
+          showToast("🏆 Challenge Completed: Campus Explorer! (+150 pts & Explorer Scout badge)", "success");
+        } else {
+          showToast(`New campus spot discovered: ${item.name}`, "info");
+        }
+      }
+    }
+  };
+
+  const recordPlaceDiscovery = (placeId: string) => {
+    const result = recordPlaceDiscoveryLogic(stateRef.current, placeId, Date.now());
+    if (result.isNewDiscovery) {
+      setState(result.state);
+      if (result.awarded && result.challengeCompleted === "campus-explorer") {
+        showToast("🏆 Challenge Completed: Campus Explorer! (+150 pts & Explorer Scout badge)", "success");
+      } else {
+        showToast(`New campus spot discovered: ${placeById.get(placeId)?.name ?? placeId}`, "info");
+      }
+    }
+  };
+
+  const startDetoxTimer = (durationSeconds = 15 * 60) => {
+    const result = startDetoxTimerLogic(stateRef.current, durationSeconds, Date.now());
+    if (result.error) {
+      showToast(result.error, "error");
+      return;
+    }
+    setState(result.state);
+    showToast("15-minute screen-free timer started. Time to unplug!", "info");
+  };
+
+  const cancelDetoxTimer = () => {
+    setState((current) => cancelDetoxTimerLogic(current, Date.now()));
+    showToast("Detox timer cancelled.", "info");
+  };
+
+  const claimDetoxTimer = () => {
+    const result = claimDetoxTimerLogic(stateRef.current, Date.now());
+    if (result.error) {
+      showToast(result.error, "error");
+      return;
+    }
+    setState(result.state);
+    showToast("🧘 Challenge Completed: Digital Detox! (+100 pts & Zen Master badge)", "success");
+  };
+
+  const recordStudySession = (params: { friendId?: string; planId?: string; note?: string }): boolean => {
+    const result = recordStudySessionLogic(stateRef.current, params, Date.now());
+    if (result.error) {
+      showToast(result.error, "error");
+      return false;
+    }
+    setState(result.state);
+    showToast("📚 Challenge Completed: Study Buddy! (+120 pts & Study Squad badge)", "success");
+    return true;
+  };
+
+  const recordGreenEscape = (itemId: string): boolean => {
+    const result = recordGreenEscapeLogic(stateRef.current, itemId, Date.now());
+    if (result.error) {
+      showToast(result.error, "error");
+      return false;
+    }
+    setState(result.state);
+    showToast("🌿 Challenge Completed: Green Escape! (+80 pts & Green Thumb badge)", "success");
+    return true;
+  };
+
+  const getChallengeProgress = (challengeId: string) => {
+    return getChallengeProgressLogic(stateRef.current, challengeId, clock);
+  };
+
+  const challengesSummary = useMemo(() => {
+    return getChallengesSummaryLogic(state, clock);
+  }, [state, clock]);
 
   const jumpToRecommendations = () => {
     setView("discover");
@@ -573,6 +691,15 @@ export function EscapeProvider({ children }: { children: React.ReactNode }) {
       setPlansOpen(true);
     },
     closePlans: () => setPlansOpen(false),
+    challenges: state.challenges,
+    challengesSummary,
+    recordPlaceDiscovery,
+    startDetoxTimer,
+    cancelDetoxTimer,
+    claimDetoxTimer,
+    recordStudySession,
+    recordGreenEscape,
+    getChallengeProgress,
     toast,
     showToast,
     clearToast: () => setToast(null),
